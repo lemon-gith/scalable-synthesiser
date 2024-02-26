@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
+#include <STM32FreeRTOS.h>
 #include <bitset>
 
 //Constants
@@ -7,6 +8,7 @@
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756, 102152113};
   volatile uint32_t currentStepSizes[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+  volatile char keyString[12] = "-----------";
 
 //Pin definitions
   //Row select and enable
@@ -37,7 +39,7 @@
   const int HKOE_BIT = 6;
 
 //Display driver object
-U8G2_SSD1305_128X32_NONAME_F_HW_I2C u8g2(U8G2_R0);
+U8G2_SSD1305_128X32_ADAFRUIT_F_HW_I2C u8g2(U8G2_R0);
 
 //Function to check key selection
 std::bitset<4> readCols(){
@@ -74,22 +76,53 @@ std::bitset<32> readKeys() {
   return keysDown;
 }
 
-void playKeys(char keyString[]) {
-  std::bitset<32> keyBools;
-  uint32_t localCurrentStepSizes[12];
-  keyBools = readKeys();
-  for (int i = 0; i < 12; i++) {
-      if (keyBools[i] == 0) {
-          keyString[i] = keys[i];
-          localCurrentStepSizes[i] = stepSizes[i];
-      }
-      else{
-        localCurrentStepSizes[i] = 0;
-      }
+void playKeysTask(void * pvParameters) {
+  const TickType_t xFrequency = 50/portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  while (1){
+    u8g2.drawStr(2,10,"In Loop");
+    vTaskDelayUntil( &xLastWakeTime, xFrequency );
+    std::bitset<32> keyBools;
+    uint32_t localCurrentStepSizes[12];
+    keyBools = readKeys();
+    for (int i = 0; i < 12; i++) {
+        if (keyBools[i] == 0) {
+            keyString[i] = keys[i];
+            localCurrentStepSizes[i] = stepSizes[i];
+        }
+        else{
+          keyString[i] = '-';
+          localCurrentStepSizes[i] = 0;
+        }
+    }
+    // TODO: ADD MUTEX HERE
+    for (int i = 0; i<12; i++) {
+      __atomic_store_n(&currentStepSizes[i], localCurrentStepSizes[i], __ATOMIC_RELAXED);
+    }
   }
-  // TODO: ADD MUTEX HERE
-  for (int i = 0; i<12; i++) {
-    __atomic_store_n(&currentStepSizes[i], localCurrentStepSizes[i], __ATOMIC_RELAXED);
+}
+
+void updateDisplayTask(void * pvParameters){
+  const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  while (1){
+    u8g2.clearBuffer();         // clear the internal memory
+    u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
+    //Key value loop
+    u8g2.setCursor(2,30);
+    for (int i = 0; i<12; i++){
+      if (currentStepSizes[i] != 0){
+        u8g2.print(currentStepSizes[i]);
+      }
+    }
+    //TODO: Add MUTEX
+    char localKeys[12];
+    for (int i = 0; i<12; i++){
+      localKeys[i] = keyString[i];
+    }
+    u8g2.drawStr(2,20,localKeys);
+    //
+    u8g2.sendBuffer();          // transfer internal memory to the display
   }
 }
 
@@ -152,40 +185,36 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Hello World");
 
+  //Initialise freeRTOS
+  TaskHandle_t playKeysHandle = NULL;
+  xTaskCreate(
+  playKeysTask,		/* Function that implements the task */
+  "playKeys",		/* Text name for the task */
+  256,      		/* Stack size in words, not bytes */
+  NULL,			/* Parameter passed into the task */
+  1,			/* Task priority */
+  &playKeysHandle );	/* Pointer to store the task handle */
+
+  TaskHandle_t updateDisplayHandle = NULL;
+  xTaskCreate(
+  updateDisplayTask,		/* Function that implements the task */
+  "playKeys",		/* Text name for the task */
+  64,      		/* Stack size in words, not bytes */
+  NULL,			/* Parameter passed into the task */
+  2,			/* Task priority */
+  &updateDisplayHandle );	/* Pointer to store the task handle */
+
   //Initialise hardware timer
   TIM_TypeDef *Instance = TIM1;
   HardwareTimer *sampleTimer = new HardwareTimer(Instance);
   sampleTimer->setOverflow(22000, HERTZ_FORMAT);
   sampleTimer->attachInterrupt(sampleISR);
   sampleTimer->resume();
+
+  vTaskStartScheduler();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  static uint32_t next = millis();
-  static uint32_t count = 0;
-
-  while (millis() < next);  //Wait for next interval
-
-  next += interval;
-
-  //Update display
-  u8g2.clearBuffer();         // clear the internal memory
-  u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-  u8g2.drawStr(2,10,"Hello World!");  // write something to the internal memory
-  u8g2.setCursor(2,20);
-  //Display keys pressed
-  char keys[13] = "------------"; // Initialize keyString with dashes
-  playKeys(keys);
-  u8g2.print(keys);
-  u8g2.setCursor(2,30);
-  for (int i = 0; i<12; i++){
-    if (currentStepSizes[i] != 0){
-      u8g2.print(currentStepSizes[i]);
-    }
-  }
-  //
-  u8g2.sendBuffer();          // transfer internal memory to the display
 
   //Toggle LED
   digitalToggle(LED_BUILTIN);
