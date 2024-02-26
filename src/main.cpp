@@ -8,7 +8,7 @@
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756, 102152113};
   volatile uint32_t currentStepSizes[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
-  volatile char keyString[12] = "-----------";
+  volatile char keyString[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
 
 //Pin definitions
   //Row select and enable
@@ -80,7 +80,6 @@ void playKeysTask(void * pvParameters) {
   const TickType_t xFrequency = 50/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
-    u8g2.drawStr(2,10,"In Loop");
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
     std::bitset<32> keyBools;
     uint32_t localCurrentStepSizes[12];
@@ -108,6 +107,8 @@ void updateDisplayTask(void * pvParameters){
   while (1){
     u8g2.clearBuffer();         // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
+    //Header
+    u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Key value loop
     u8g2.setCursor(2,30);
     for (int i = 0; i<12; i++){
@@ -116,10 +117,11 @@ void updateDisplayTask(void * pvParameters){
       }
     }
     //TODO: Add MUTEX
-    char localKeys[12];
+    static char localKeys[12];
     for (int i = 0; i<12; i++){
       localKeys[i] = keyString[i];
     }
+    Serial.println(localKeys);
     u8g2.drawStr(2,20,localKeys);
     //
     u8g2.sendBuffer();          // transfer internal memory to the display
@@ -190,18 +192,18 @@ void setup() {
   xTaskCreate(
   playKeysTask,		/* Function that implements the task */
   "playKeys",		/* Text name for the task */
-  256,      		/* Stack size in words, not bytes */
+  64,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
-  1,			/* Task priority */
+  2,			/* Task priority */
   &playKeysHandle );	/* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
   xTaskCreate(
   updateDisplayTask,		/* Function that implements the task */
   "playKeys",		/* Text name for the task */
-  64,      		/* Stack size in words, not bytes */
+  256,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
-  2,			/* Task priority */
+  1,			/* Task priority */
   &updateDisplayHandle );	/* Pointer to store the task handle */
 
   //Initialise hardware timer
