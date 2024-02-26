@@ -1,8 +1,12 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
+#include <bitset>
 
 //Constants
   const uint32_t interval = 100; //Display update interval
+  const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
+  const uint32_t stepSizes [] = {54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756, 102152113};
+  volatile uint32_t keySteps[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
 
 //Pin definitions
   //Row select and enable
@@ -34,6 +38,55 @@
 
 //Display driver object
 U8G2_SSD1305_128X32_NONAME_F_HW_I2C u8g2(U8G2_R0);
+
+//Function to check key selection
+std::bitset<4> readCols(){
+  std::bitset<4> result;
+  result[3] = digitalRead(C3_PIN);
+  result[2] = digitalRead(C2_PIN);
+  result[1] = digitalRead(C1_PIN);
+  result[0] = digitalRead(C0_PIN);
+  return result;
+}
+
+void setRow(uint8_t row){
+  digitalWrite(REN_PIN, LOW);
+  digitalWrite(RA2_PIN, row & 0x04 ? HIGH : LOW);
+  digitalWrite(RA1_PIN, row & 0x02 ? HIGH : LOW);
+  digitalWrite(RA0_PIN, row & 0x01 ? HIGH : LOW);
+  digitalWrite(REN_PIN, HIGH);
+}
+
+std::bitset<4> readRow(uint8_t row){
+  setRow(row);
+  delayMicroseconds(3);
+  return readCols();
+}
+
+std::bitset<32> readKeys() {
+  std::bitset<32> keysDown;
+  for (int i = 0; i < 3; i++) {
+      std::bitset<4> rowVals = readRow(i);
+      for (int j = 0; j < 4; j++) {
+          keysDown[(i*4)+j] = rowVals[j];
+      }
+  }
+  return keysDown;
+}
+
+void playKeys(char keyString[]) {
+  std::bitset<32> keyBools;
+  keyBools = readKeys();
+  for (int i = 0; i < 12; i++) {
+      if (keyBools[i] == 0) {
+          keyString[i] = keys[i];
+          keySteps[i] = stepSizes[i];
+      }
+      else{
+        keySteps[i] = 0;
+      }
+  }
+}
 
 //Function to set outputs using key matrix
 void setOutMuxBit(const uint8_t bitIdx, const bool value) {
@@ -91,9 +144,19 @@ void loop() {
   //Update display
   u8g2.clearBuffer();         // clear the internal memory
   u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-  u8g2.drawStr(2,10,"Helllo World!");  // write something to the internal memory
+  u8g2.drawStr(2,10,"Hello World!");  // write something to the internal memory
   u8g2.setCursor(2,20);
-  u8g2.print(count++);
+  //Display keys pressed
+  char keys[13] = "------------"; // Initialize keyString with dashes
+  playKeys(keys);
+  u8g2.print(keys);
+  u8g2.setCursor(2,30);
+  for (int i = 0; i<12; i++){
+    if (keySteps[i] != 0){
+      u8g2.print(keySteps[i]);
+    }
+  }
+  //
   u8g2.sendBuffer();          // transfer internal memory to the display
 
   //Toggle LED
