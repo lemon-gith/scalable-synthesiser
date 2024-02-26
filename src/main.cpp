@@ -121,7 +121,6 @@ void updateDisplayTask(void * pvParameters){
     for (int i = 0; i<12; i++){
       localKeys[i] = keyString[i];
     }
-    Serial.println(localKeys);
     u8g2.drawStr(2,20,localKeys);
     //
     u8g2.sendBuffer();          // transfer internal memory to the display
