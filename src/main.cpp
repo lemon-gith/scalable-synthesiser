@@ -6,7 +6,7 @@
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756, 102152113};
-  volatile uint32_t keySteps[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+  volatile uint32_t currentStepSizes[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
 
 //Pin definitions
   //Row select and enable
@@ -76,16 +76,37 @@ std::bitset<32> readKeys() {
 
 void playKeys(char keyString[]) {
   std::bitset<32> keyBools;
+  uint32_t localCurrentStepSizes[12];
   keyBools = readKeys();
   for (int i = 0; i < 12; i++) {
       if (keyBools[i] == 0) {
           keyString[i] = keys[i];
-          keySteps[i] = stepSizes[i];
+          localCurrentStepSizes[i] = stepSizes[i];
       }
       else{
-        keySteps[i] = 0;
+        localCurrentStepSizes[i] = 0;
       }
   }
+  // TODO: ADD MUTEX HERE
+  for (int i = 0; i<12; i++) {
+    __atomic_store_n(&currentStepSizes[i], localCurrentStepSizes[i], __ATOMIC_RELAXED);
+  }
+}
+
+void sampleISR() {
+  static uint32_t phaseAcc = 0;
+  uint32_t phaseAccChange = 0;
+  for(int i=0; i<12; i++){
+    phaseAccChange += currentStepSizes[i];
+  }
+  if (phaseAccChange==0){
+    phaseAcc = 0;
+  }
+  else{
+    phaseAcc += phaseAccChange;
+  }
+  int32_t Vout = (phaseAcc >> 24) - 128;
+  analogWrite(OUTR_PIN, Vout + 128);
 }
 
 //Function to set outputs using key matrix
@@ -130,6 +151,13 @@ void setup() {
   //Initialise UART
   Serial.begin(9600);
   Serial.println("Hello World");
+
+  //Initialise hardware timer
+  TIM_TypeDef *Instance = TIM1;
+  HardwareTimer *sampleTimer = new HardwareTimer(Instance);
+  sampleTimer->setOverflow(22000, HERTZ_FORMAT);
+  sampleTimer->attachInterrupt(sampleISR);
+  sampleTimer->resume();
 }
 
 void loop() {
@@ -152,8 +180,8 @@ void loop() {
   u8g2.print(keys);
   u8g2.setCursor(2,30);
   for (int i = 0; i<12; i++){
-    if (keySteps[i] != 0){
-      u8g2.print(keySteps[i]);
+    if (currentStepSizes[i] != 0){
+      u8g2.print(currentStepSizes[i]);
     }
   }
   //
