@@ -3,5 +3,3 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-.U8g2/*
-.stm32duino/*
