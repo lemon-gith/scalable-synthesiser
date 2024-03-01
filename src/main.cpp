@@ -43,7 +43,7 @@
 //Display driver object
 U8G2_SSD1305_128X32_ADAFRUIT_F_HW_I2C u8g2(U8G2_R0);
 
-//Function to check key selection
+//Big Endian
 std::bitset<4> readCols(){
   std::bitset<4> result;
   result[3] = digitalRead(C3_PIN);
@@ -78,23 +78,34 @@ std::bitset<32> readKeys() {
   return keysDown;
 }
 
-// Output in order {0A, 0B, 0S, 1A, 1B, 1S, 2A, 2B, 2S, 3A, 3B, 3S}
-std::bitset<32> readKnob(){
-  std::bitset<32> knobVals;
-  // read in order {3A, 3B, 2A, 2B, 1A, 1B, 0A, 0B, 2S, 3S, 0S, 1S} first
+const char* bitsetToCString(const std::bitset<16>& bits) {
+    static char str[17]; // 32 bits + null terminator
+    for (int i = bits.size() - 1; i >= 0; --i) {
+        str[15 - i] = bits[i] ? '1' : '0';
+    }
+    str[16] = '\0';
+    return str;
+}
+
+// Output in order {0S 1S 2S 3S 0B 0A 1B 1A 2B 2A 3B 3A}
+std::bitset<16> readKnob(){
+  std::bitset<16> knobVals;  
   for (int i = 3; i < 7; i++){
     std::bitset<4> rowVals = readRow(i);
-    if (3 <= i < 5){ //A&B vals
-      for (int j = 0; j < 3; j++) {
+    if ((3<=i)&(i<5)){ //A&B vals
+      for (int j = 0; j < 4; j++) {
         knobVals[(i-3)*4+j] = rowVals[j];
       }
     }
     else{ //S vals
       for (int j = 0; j < 2; j++){
-        knobVals[8+((i-5)*2)+j] = rowVals[j];
+        knobVals[8+((i-5)*2)+j] = rowVals[1-j];
       }
     }
   }
+  //std::bitset<4> rowVals = readRow(3);
+  const char* knobValString = bitsetToCString(knobVals);
+  Serial.println(knobValString);
   return knobVals;
 }
 
@@ -138,6 +149,9 @@ void updateKeysTask(void * pvParameters) {
       __atomic_store_n(&keyValues[i], localkeyValues[i], __ATOMIC_RELAXED);
     }
     xSemaphoreGive(keyValueMutex);
+
+    std::bitset<16> knobBools;
+    knobBools = readKnob();
   }
 }
 
