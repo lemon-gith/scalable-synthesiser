@@ -11,6 +11,10 @@
   SemaphoreHandle_t keyValueMutex;
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
   SemaphoreHandle_t keyStringsMutex;
+  volatile uint32_t knobValues[4] = {50,50,50,50}; // K0 K1 K2 K3
+  SemaphoreHandle_t knobValuesMutex;
+  volatile bool knobPushes[4] = {0,0,0,0};
+  SemaphoreHandle_t knobPushesMutex;
 
 //Pin definitions
   //Row select and enable
@@ -78,17 +82,8 @@ std::bitset<32> readKeys() {
   return keysDown;
 }
 
-const char* bitsetToCString(const std::bitset<16>& bits) {
-    static char str[17]; // 32 bits + null terminator
-    for (int i = bits.size() - 1; i >= 0; --i) {
-        str[15 - i] = bits[i] ? '1' : '0';
-    }
-    str[16] = '\0';
-    return str;
-}
-
-// Output in order {0S 1S 2S 3S 0B 0A 1B 1A 2B 2A 3B 3A}
-std::bitset<16> readKnob(){
+// Output in zero-indexed array order {3A 3B 2A 2B 1A 1B 0A 0B 3S 2S 1S 0S}
+std::bitset<16> readKnobs(){
   std::bitset<16> knobVals;  
   for (int i = 3; i < 7; i++){
     std::bitset<4> rowVals = readRow(i);
@@ -103,15 +98,21 @@ std::bitset<16> readKnob(){
       }
     }
   }
-  //std::bitset<4> rowVals = readRow(3);
-  const char* knobValString = bitsetToCString(knobVals);
-  Serial.println(knobValString);
   return knobVals;
+}
+
+const char* bitsetToCString(const std::bitset<2>& bits) {
+    static char str[3]; // 2 bits + null terminator
+    for (int i = 1; i >= 0; --i) {
+      str[1 - i] = bits[i] ? '1' : '0';
+    }
+    str[2] = '\0'; // Null-terminate the string
+    return str;
 }
 
 // TIMED TASKS
 void updateKeysTask(void * pvParameters) {
-  const TickType_t xFrequency = 50/portTICK_PERIOD_MS;
+  const TickType_t xFrequency = 20/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
@@ -137,21 +138,61 @@ void updateKeysTask(void * pvParameters) {
         localkeyValues[i] = 0;
       }
     }
+    // Store knob values and push bools
+    std::bitset<16> prevKnobBools;
+    static std::bitset<16> knobBools = readKnobs();
+    prevKnobBools = knobBools;
+    knobBools = readKnobs();
+    static int localKnobDiffs[4] = {0,0,0,0};
+    bool localKnobPushes[4];
+    for (int i=0; i<4; i++){
+      //Knob values in format {B,A}
+      std::bitset<2> prevBool, currBool;
+      prevBool[1] = prevKnobBools[(2*i)+1];
+      prevBool[0] = prevKnobBools[2*i];
+      currBool[1] = knobBools[(2*i)+1];
+      currBool[0] = knobBools[2*i];
+      if(i==0){
+        Serial.println(bitsetToCString(prevBool));
+        Serial.println(bitsetToCString(currBool));
+      }
+      if(((prevBool == 0b00)and(currBool == 0b01))or((prevBool == 0b11)and(currBool == 0b10))){
+        localKnobDiffs[3-i] = (knobValues[3-i] < 100) ? 1 : 0;
+      }
+      else if(((prevBool == 0b01)and(currBool == 0b00))or((prevBool == 0b10)and(currBool == 0b11))){
+        localKnobDiffs[3-i] = (knobValues[3-i] > 0) ? -1 : 0;
+      }
+      else{
+        localKnobDiffs[3-i] = 0;
+      }
+      //Knob pushes
+      localKnobPushes[3-i] = !knobBools[i+8];
+    }
     // Store key string globally
     xSemaphoreTake(keyStringsMutex, portMAX_DELAY);
-    for (int i = 0; i<12; i++) {
+    for (int i=0; i<12; i++) {
       __atomic_store_n(&keyStrings[i], localKeyStrings[i], __ATOMIC_RELAXED);
     }
     xSemaphoreGive(keyStringsMutex);
     // Store key values globally
     xSemaphoreTake(keyValueMutex, portMAX_DELAY);
-    for (int i = 0; i<12; i++) {
+    for (int i=0; i<12; i++) {
       __atomic_store_n(&keyValues[i], localkeyValues[i], __ATOMIC_RELAXED);
     }
     xSemaphoreGive(keyValueMutex);
-
-    std::bitset<16> knobBools;
-    knobBools = readKnob();
+    // Store knob values globally
+    xSemaphoreTake(knobValuesMutex, portMAX_DELAY);
+    for (int i=0; i<4; i++){
+      int tmp = knobValues[i]+localKnobDiffs[i];
+      __atomic_store_n(&knobValues[i], tmp, __ATOMIC_RELAXED);
+    }
+    xSemaphoreGive(knobValuesMutex);
+    // Store knob pushes globally
+    xSemaphoreTake(knobPushesMutex, portMAX_DELAY);
+    for (int i=0; i<4; i++){
+      __atomic_store_n(&knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
+    }
+    xSemaphoreGive(knobPushesMutex);
   }
 }
 
@@ -165,24 +206,42 @@ void updateDisplayTask(void * pvParameters){
     //Header
     u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Display key values
-    u8g2.setCursor(2,30);
-    int localKeyValues[12];
-    for (int i = 0; i<12; i++){
-      localKeyValues[i] = keyValues[i];
-    }
-    for (int i = 0; i<12; i++){
-      if (localKeyValues[i] != 0){
-        u8g2.print(localKeyValues[i]);
-      }
-    }
+    // u8g2.setCursor(2,30);
+    // int localKeyValues[12];
+    // for (int i = 0; i<12; i++){
+    //   localKeyValues[i] = keyValues[i];
+    // }
+    // for (int i = 0; i<12; i++){
+    //   if (localKeyValues[i] != 0){
+    //     u8g2.print(localKeyValues[i]);
+    //   }
+    // }
     //Display key names
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
-    for (int i = 0; i<12; i++){
+    for (int i=0; i<12; i++){
       localKeyStrings[i] = keyStrings[i];
     }
     u8g2.drawStr(2,20,localKeyStrings);
-
+    //Display knob values
+    int localKnobValues[4];
+    for (int i=0; i<4; i++){
+      localKnobValues[i] = knobValues[i];
+    }
+    for (int i=0; i<4; i++){
+      u8g2.setCursor((2+(35*i)),30);
+      u8g2.print(localKnobValues[i]);
+    }
+    //Display knob pushes
+    // int localKnobPushes[4];
+    // for (int i=0; i<4; i++){
+    //   localKnobPushes[i] = knobPushes[i];
+    // }
+    // for (int i=0; i<4; i++){
+    //   u8g2.setCursor((2+(35*i)),30);
+    //   u8g2.print(localKnobPushes[i]);
+    // }
+    //
     u8g2.sendBuffer();          // transfer internal memory to the display
     digitalToggle(LED_BUILTIN); //Toggle LED for CW requirement
   }
@@ -277,6 +336,8 @@ void setup() {
   //Set up mutexes
   keyValueMutex = xSemaphoreCreateMutex();
   keyStringsMutex = xSemaphoreCreateMutex();
+  knobValuesMutex = xSemaphoreCreateMutex();
+  knobPushesMutex = xSemaphoreCreateMutex();
 
   vTaskStartScheduler();
 }
