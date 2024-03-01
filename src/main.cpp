@@ -7,10 +7,10 @@
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
-  volatile uint32_t keyArray[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
-  SemaphoreHandle_t keyArrayMutex;
-  volatile char keyString[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
-  SemaphoreHandle_t keyStringMutex;
+  volatile uint32_t keyValues[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+  SemaphoreHandle_t keyValueMutex;
+  volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
+  SemaphoreHandle_t keyStringsMutex;
 
 //Pin definitions
   //Row select and enable
@@ -87,40 +87,41 @@ void updateKeysTask(void * pvParameters) {
     std::bitset<32> keyBools;
     keyBools = readKeys();
     // Store key string locally
-    char localKeyString[12];
+    char localKeyStrings[12];
     for (int i = 0; i < 12; i++) {
         if (keyBools[i] == 0) {
-            localKeyString[i] = keys[i];
+            localKeyStrings[i] = keys[i];
         }
         else{
-          localKeyString[i] = '-';
+          localKeyStrings[i] = '-';
         }
     }
     // Store step sizes locally
-    uint32_t localkeyArray[12];
+    uint32_t localkeyValues[12];
     for (int i = 0; i < 12; i++) {
       if (keyBools[i] == 0) {
-        localkeyArray[i] = stepSizes[i];
+        localkeyValues[i] = stepSizes[i];
       }
       else{
-        localkeyArray[i] = 0;
+        localkeyValues[i] = 0;
       }
     }
     // Store key string globally
-    xSemaphoreTake(keyStringMutex, portMAX_DELAY);
+    xSemaphoreTake(keyStringsMutex, portMAX_DELAY);
     for (int i = 0; i<12; i++) {
-      __atomic_store_n(&keyString[i], localKeyString[i], __ATOMIC_RELAXED);
+      __atomic_store_n(&keyStrings[i], localKeyStrings[i], __ATOMIC_RELAXED);
     }
-    xSemaphoreGive(keyStringMutex);
-    // Store step sizes globally
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    xSemaphoreGive(keyStringsMutex);
+    // Store key values globally
+    xSemaphoreTake(keyValueMutex, portMAX_DELAY);
     for (int i = 0; i<12; i++) {
-      __atomic_store_n(&keyArray[i], localkeyArray[i], __ATOMIC_RELAXED);
+      __atomic_store_n(&keyValues[i], localkeyValues[i], __ATOMIC_RELAXED);
     }
-    xSemaphoreGive(keyArrayMutex);
+    xSemaphoreGive(keyValueMutex);
   }
 }
 
+// Refreshes display
 void updateDisplayTask(void * pvParameters){
   const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -129,30 +130,36 @@ void updateDisplayTask(void * pvParameters){
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
     //Header
     u8g2.drawStr(2,10,"UNISYNTH Ltd.");
-    //Key value loop
+    //Display key values
     u8g2.setCursor(2,30);
-    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    int localKeyValues[12];
     for (int i = 0; i<12; i++){
-      if (keyArray[i] != 0){
-        u8g2.print(keyArray[i]);
+      localKeyValues[i] = keyValues[i];
+    }
+    for (int i = 0; i<12; i++){
+      if (localKeyValues[i] != 0){
+        u8g2.print(localKeyValues[i]);
       }
     }
-    xSemaphoreGive(keyArrayMutex);
-
-    static char localKeys[12];
+    //Display key names
+    char localKeyStrings[13];
+    localKeyStrings[12] = '\0'; //Termination
     for (int i = 0; i<12; i++){
-      localKeys[i] = keyString[i];
+      localKeyStrings[i] = keyStrings[i];
     }
-    u8g2.drawStr(2,20,localKeys);
+    Serial.println(localKeyStrings);
+    u8g2.drawStr(2,20,localKeyStrings);
+
     u8g2.sendBuffer();          // transfer internal memory to the display
   }
 }
 
+// ISR to output sound
 void sampleISR() {
   static uint32_t phaseAcc = 0;
   uint32_t phaseAccChange = 0;
   for(int i=0; i<12; i++){
-    phaseAccChange += keyArray[i];
+    phaseAccChange += keyValues[i];
   }
   if (phaseAccChange==0){
     phaseAcc = 0;
@@ -234,8 +241,8 @@ void setup() {
   sampleTimer->resume();
 
   //Set up mutexes
-  keyArrayMutex = xSemaphoreCreateMutex();
-  keyStringMutex = xSemaphoreCreateMutex();
+  keyValueMutex = xSemaphoreCreateMutex();
+  keyStringsMutex = xSemaphoreCreateMutex();
 
   vTaskStartScheduler();
 }
