@@ -78,6 +78,26 @@ std::bitset<32> readKeys() {
   return keysDown;
 }
 
+// Output in order {0A, 0B, 0S, 1A, 1B, 1S, 2A, 2B, 2S, 3A, 3B, 3S}
+std::bitset<32> readKnob(){
+  std::bitset<32> knobVals;
+  // read in order {3A, 3B, 2A, 2B, 1A, 1B, 0A, 0B, 2S, 3S, 0S, 1S} first
+  for (int i = 3; i < 7; i++){
+    std::bitset<4> rowVals = readRow(i);
+    if (3 <= i < 5){ //A&B vals
+      for (int j = 0; j < 3; j++) {
+        knobVals[(i-3)*4+j] = rowVals[j];
+      }
+    }
+    else{ //S vals
+      for (int j = 0; j < 2; j++){
+        knobVals[8+((i-5)*2)+j] = rowVals[j];
+      }
+    }
+  }
+  return knobVals;
+}
+
 // TIMED TASKS
 void updateKeysTask(void * pvParameters) {
   const TickType_t xFrequency = 50/portTICK_PERIOD_MS;
@@ -147,10 +167,10 @@ void updateDisplayTask(void * pvParameters){
     for (int i = 0; i<12; i++){
       localKeyStrings[i] = keyStrings[i];
     }
-    Serial.println(localKeyStrings);
     u8g2.drawStr(2,20,localKeyStrings);
 
     u8g2.sendBuffer();          // transfer internal memory to the display
+    digitalToggle(LED_BUILTIN); //Toggle LED for CW requirement
   }
 }
 
@@ -218,7 +238,7 @@ void setup() {
   TaskHandle_t updateKeysHandle = NULL;
   xTaskCreate(
   updateKeysTask,		/* Function that implements the task */
-  "playKeys",		/* Text name for the task */
+  "updateKeys",		/* Text name for the task */
   64,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   2,			/* Task priority */
@@ -227,7 +247,7 @@ void setup() {
   TaskHandle_t updateDisplayHandle = NULL;
   xTaskCreate(
   updateDisplayTask,		/* Function that implements the task */
-  "playKeys",		/* Text name for the task */
+  "updateDisplay",		/* Text name for the task */
   256,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   1,			/* Task priority */
@@ -247,9 +267,4 @@ void setup() {
   vTaskStartScheduler();
 }
 
-void loop() {
-
-  //Toggle LED
-  digitalToggle(LED_BUILTIN);
-  
-}
+void loop() {}
