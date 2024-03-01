@@ -6,9 +6,11 @@
 //Constants
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
-  const uint32_t stepSizes [] = {54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756, 102152113};
-  volatile uint32_t currentStepSizes[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+  const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
+  volatile uint32_t keyArray[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+  SemaphoreHandle_t keyArrayMutex;
   volatile char keyString[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
+  SemaphoreHandle_t keyStringMutex;
 
 //Pin definitions
   //Row select and enable
@@ -76,28 +78,46 @@ std::bitset<32> readKeys() {
   return keysDown;
 }
 
-void playKeysTask(void * pvParameters) {
+// TIMED TASKS
+void updateKeysTask(void * pvParameters) {
   const TickType_t xFrequency = 50/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
     std::bitset<32> keyBools;
-    uint32_t localCurrentStepSizes[12];
     keyBools = readKeys();
+    // Store key string locally
+    char localKeyString[12];
     for (int i = 0; i < 12; i++) {
         if (keyBools[i] == 0) {
-            keyString[i] = keys[i];
-            localCurrentStepSizes[i] = stepSizes[i];
+            localKeyString[i] = keys[i];
         }
         else{
-          keyString[i] = '-';
-          localCurrentStepSizes[i] = 0;
+          localKeyString[i] = '-';
         }
     }
-    // TODO: ADD MUTEX HERE
-    for (int i = 0; i<12; i++) {
-      __atomic_store_n(&currentStepSizes[i], localCurrentStepSizes[i], __ATOMIC_RELAXED);
+    // Store step sizes locally
+    uint32_t localkeyArray[12];
+    for (int i = 0; i < 12; i++) {
+      if (keyBools[i] == 0) {
+        localkeyArray[i] = stepSizes[i];
+      }
+      else{
+        localkeyArray[i] = 0;
+      }
     }
+    // Store key string globally
+    xSemaphoreTake(keyStringMutex, portMAX_DELAY);
+    for (int i = 0; i<12; i++) {
+      __atomic_store_n(&keyString[i], localKeyString[i], __ATOMIC_RELAXED);
+    }
+    xSemaphoreGive(keyStringMutex);
+    // Store step sizes globally
+    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
+    for (int i = 0; i<12; i++) {
+      __atomic_store_n(&keyArray[i], localkeyArray[i], __ATOMIC_RELAXED);
+    }
+    xSemaphoreGive(keyArrayMutex);
   }
 }
 
@@ -111,18 +131,19 @@ void updateDisplayTask(void * pvParameters){
     u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Key value loop
     u8g2.setCursor(2,30);
+    xSemaphoreTake(keyArrayMutex, portMAX_DELAY);
     for (int i = 0; i<12; i++){
-      if (currentStepSizes[i] != 0){
-        u8g2.print(currentStepSizes[i]);
+      if (keyArray[i] != 0){
+        u8g2.print(keyArray[i]);
       }
     }
-    //TODO: Add MUTEX
+    xSemaphoreGive(keyArrayMutex);
+
     static char localKeys[12];
     for (int i = 0; i<12; i++){
       localKeys[i] = keyString[i];
     }
     u8g2.drawStr(2,20,localKeys);
-    //
     u8g2.sendBuffer();          // transfer internal memory to the display
   }
 }
@@ -131,7 +152,7 @@ void sampleISR() {
   static uint32_t phaseAcc = 0;
   uint32_t phaseAccChange = 0;
   for(int i=0; i<12; i++){
-    phaseAccChange += currentStepSizes[i];
+    phaseAccChange += keyArray[i];
   }
   if (phaseAccChange==0){
     phaseAcc = 0;
@@ -187,14 +208,14 @@ void setup() {
   Serial.println("Hello World");
 
   //Initialise freeRTOS
-  TaskHandle_t playKeysHandle = NULL;
+  TaskHandle_t updateKeysHandle = NULL;
   xTaskCreate(
-  playKeysTask,		/* Function that implements the task */
+  updateKeysTask,		/* Function that implements the task */
   "playKeys",		/* Text name for the task */
   64,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   2,			/* Task priority */
-  &playKeysHandle );	/* Pointer to store the task handle */
+  &updateKeysHandle );	/* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
   xTaskCreate(
@@ -211,6 +232,10 @@ void setup() {
   sampleTimer->setOverflow(22000, HERTZ_FORMAT);
   sampleTimer->attachInterrupt(sampleISR);
   sampleTimer->resume();
+
+  //Set up mutexes
+  keyArrayMutex = xSemaphoreCreateMutex();
+  keyStringMutex = xSemaphoreCreateMutex();
 
   vTaskStartScheduler();
 }
