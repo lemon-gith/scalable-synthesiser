@@ -7,11 +7,12 @@
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
+  const uint32_t knobMaxes[4] = {8,3,5,4};
 //System state variable arrays
-struct{
+struct {
   volatile uint32_t keyValues[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
-  volatile uint32_t knobValues[4] = {50,50,50,50}; // K0 K1 K2 K3
+  volatile uint32_t knobValues[4] = {knobMaxes[0],knobMaxes[1],knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
   volatile bool knobPushes[4] = {0,0,0,0};
   SemaphoreHandle_t mutex;
 } sysState;
@@ -144,8 +145,8 @@ void updateKeysTask(void * pvParameters) {
       currBool[1] = knobBools[(2*i)+1];
       currBool[0] = knobBools[2*i];
       if(((prevBool == 0b00)and(currBool == 0b01))or((prevBool == 0b11)and(currBool == 0b10))){
-        localKnobDiffs[3-i] = (sysState.knobValues[3-i] < 100) ? 1 : 0;
-        lastLegalDiff[3-i] = (sysState.knobValues[3-i] < 100) ? 1 : 0;
+        localKnobDiffs[3-i] = (sysState.knobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
+        lastLegalDiff[3-i] = (sysState.knobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
       }
       else if(((prevBool == 0b01)and(currBool == 0b00))or((prevBool == 0b10)and(currBool == 0b11))){
         localKnobDiffs[3-i] = (sysState.knobValues[3-i] > 0) ? -1 : 0;
