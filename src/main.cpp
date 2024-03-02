@@ -101,15 +101,6 @@ std::bitset<16> readKnobs(){
   return knobVals;
 }
 
-const char* bitsetToCString(const std::bitset<2>& bits) {
-    static char str[3]; // 2 bits + null terminator
-    for (int i = 1; i >= 0; --i) {
-      str[1 - i] = bits[i] ? '1' : '0';
-    }
-    str[2] = '\0'; // Null-terminate the string
-    return str;
-}
-
 // TIMED TASKS
 void updateKeysTask(void * pvParameters) {
   const TickType_t xFrequency = 20/portTICK_PERIOD_MS;
@@ -167,7 +158,7 @@ void updateKeysTask(void * pvParameters) {
       }
       else{
         //illegal transition to help w skipping
-        localKnobDiffs[3-i] = lastLegalDiff[3-i];
+        localKnobDiffs[3-i] = 2*lastLegalDiff[3-i];
       }
       //Knob pushes
       localKnobPushes[3-i] = !knobBools[i+8];
