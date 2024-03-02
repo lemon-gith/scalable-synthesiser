@@ -143,7 +143,8 @@ void updateKeysTask(void * pvParameters) {
     static std::bitset<16> knobBools = readKnobs();
     prevKnobBools = knobBools;
     knobBools = readKnobs();
-    static int localKnobDiffs[4] = {0,0,0,0};
+    int localKnobDiffs[4] = {0,0,0,0};
+    int lastLegalDiff[4] = {0,0,0,0};
     bool localKnobPushes[4];
     for (int i=0; i<4; i++){
       //Knob values in format {B,A}
@@ -152,18 +153,21 @@ void updateKeysTask(void * pvParameters) {
       prevBool[0] = prevKnobBools[2*i];
       currBool[1] = knobBools[(2*i)+1];
       currBool[0] = knobBools[2*i];
-      if(i==0){
-        Serial.println(bitsetToCString(prevBool));
-        Serial.println(bitsetToCString(currBool));
-      }
       if(((prevBool == 0b00)and(currBool == 0b01))or((prevBool == 0b11)and(currBool == 0b10))){
         localKnobDiffs[3-i] = (knobValues[3-i] < 100) ? 1 : 0;
+        lastLegalDiff[3-i] = (knobValues[3-i] < 100) ? 1 : 0;
       }
       else if(((prevBool == 0b01)and(currBool == 0b00))or((prevBool == 0b10)and(currBool == 0b11))){
         localKnobDiffs[3-i] = (knobValues[3-i] > 0) ? -1 : 0;
+        lastLegalDiff[3-i] = (knobValues[3-i] > 0) ? -1 : 0;
+      }
+      else if(((prevBool == 0b00)and(currBool == 0b11))or((prevBool == 0b11)and(currBool == 0b00))or((prevBool == 0b01)and(currBool == 0b10))or((prevBool == 0b10)and(currBool == 0b01))){
+        //other legal transition
+        localKnobDiffs[3-i] = 0;
       }
       else{
-        localKnobDiffs[3-i] = 0;
+        //illegal transition to help w skipping
+        localKnobDiffs[3-i] = lastLegalDiff[3-i];
       }
       //Knob pushes
       localKnobPushes[3-i] = !knobBools[i+8];
@@ -224,13 +228,13 @@ void updateDisplayTask(void * pvParameters){
     }
     u8g2.drawStr(2,20,localKeyStrings);
     //Display knob values
-    int localKnobValues[4];
-    for (int i=0; i<4; i++){
-      localKnobValues[i] = knobValues[i];
-    }
+    // int localKnobValues[4];
+    // for (int i=0; i<4; i++){
+    //   localKnobValues[i] = knobValues[i];
+    // }
     for (int i=0; i<4; i++){
       u8g2.setCursor((2+(35*i)),30);
-      u8g2.print(localKnobValues[i]);
+      u8g2.print(knobValues[i]);
     }
     //Display knob pushes
     // int localKnobPushes[4];
