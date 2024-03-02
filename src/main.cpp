@@ -137,11 +137,13 @@ void updateKeysTask(void * pvParameters) {
         xSemaphoreGive(sysState.mutex);
       }
     }
-    Serial.print(localKeyStrings[0]);
+    Serial.print(localKeyStrings[0]); //TODO: Remove after debug
     // Send changes via CAN
-    uint8_t localTX_Message[8];
-    for (int i=0; i<8; i++){localTX_Message[i] = sysState.TX_Message[i];}
-    xQueueSend( msgOutQ, localTX_Message, portMAX_DELAY);
+    if (sysState.isSender == true){
+      uint8_t localTX_Message[8];
+      for (int i=0; i<8; i++){localTX_Message[i] = sysState.TX_Message[i];}
+      xQueueSend( msgOutQ, localTX_Message, portMAX_DELAY);
+    }
     // Store knob values and push bools
     std::bitset<16> prevKnobBools;
     static std::bitset<16> knobBools = readKnobs();
@@ -289,18 +291,20 @@ int32_t playNote(uint8_t oct, uint8_t note){
 
 // ISR to output sound
 void sampleISR() {
-  int32_t Vout = 0;
-  // Play local keys
-  // for(int i=0; i<12; i++){
-  //   if(sysState.keyStrings[i] != '-'){Vout += playNote(octave, i);}
-  // }
-  // Play received keys
-  uint8_t localRX_Message[8];
-  for (int i=0; i<8; i++){localRX_Message[i] = sysState.RX_Message[i];}
-  if (localRX_Message[0] == 'P'){
-    Vout += playNote(localRX_Message[1], localRX_Message[2]);
+  if (sysState.isSender != true){ //Only receivers output sound
+    int32_t Vout = 0;
+    //Play local keys
+    for(int i=0; i<12; i++){
+      if(sysState.keyStrings[i] != '-'){Vout += playNote(sysState.octave, i);}
+    }
+    // Play received keys
+    uint8_t localRX_Message[8];
+    for (int i=0; i<8; i++){localRX_Message[i] = sysState.RX_Message[i];}
+    if (localRX_Message[0] == 'P'){
+      Vout += playNote(localRX_Message[1], localRX_Message[2]);
+    }
+    analogWrite(OUTR_PIN, Vout);
   }
-  analogWrite(OUTR_PIN, Vout);
 }
 
 // ISR to store incoming CAN RX messages
@@ -360,7 +364,7 @@ void setup() {
   Serial.println("Hello World");
 
   //Initialise CAN
-  CAN_Init(true);     //Set to true for loopback mode
+  CAN_Init(false);     //Set to true for loopback mode
   setCANFilter(0xd123,0x7ff);    //ID, mask
   CAN_RegisterRX_ISR(CAN_RX_ISR);
   CAN_RegisterTX_ISR(CAN_TX_ISR);
