@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include <Arduino.h>sysState.TX_Message
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
 #include <ES_CAN.h>
@@ -11,15 +11,16 @@
   const uint32_t knobMaxes[4] = {8,8,5,4};
 //System state variable arrays
 struct {
-  volatile uint32_t keyValues[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+  volatile uint8_t msgKeys [24]; // Maximum number of incoming keys; assume suitable for duet
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
   volatile uint32_t knobValues[4] = {knobMaxes[0],knobMaxes[1],knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
   volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
+  volatile uint8_t octave = 4;
+  volatile uint8_t TX_Message[8] = {0};
+  volatile uint8_t RX_Message[8] = {0};
   SemaphoreHandle_t mutex;
 } sysState;
-volatile uint8_t octave = 4;
-volatile uint8_t TX_Message[8] = {0};
-volatile uint8_t RX_Message[8] = {0};
+
 QueueHandle_t msgInQ;
 //Pin definitions
   //Row select and enable
@@ -128,27 +129,15 @@ void updateKeysTask(void * pvParameters) {
       //Check for changes
       if (prevLocalKeyStrings[i] != localKeyStrings[i]){
         bool isPush = (prevLocalKeyStrings[i] == '-');
-        TX_Message[0] = isPush ? 'P' : 'R';
-        uint8_t localOctave;
-        __atomic_store_n(&localOctave, octave, __ATOMIC_RELAXED);
-        TX_Message[1] = localOctave;
-        TX_Message[2] = i;
+        sysState.TX_Message[0] = isPush ? 'P' : 'R';
+        sysState.TX_Message[1] = sysState.octave;
+        sysState.TX_Message[2] = i;
       }
     }
     // Send changes via CAN
     uint8_t localTX_Message[8];
-    for (int i=0; i<8; i++){localTX_Message[i] = TX_Message[i];}
+    for (int i=0; i<8; i++){localTX_Message[i] = sysState.TX_Message[i];}
     CAN_TX(0x123, localTX_Message);
-    // Store step sizes locally
-    uint32_t localKeyValues[12];
-    for (int i = 0; i < 12; i++) {
-      if (keyBools[i] == 0) {
-        localKeyValues[i] = stepSizes[i];
-      }
-      else{
-        localKeyValues[i] = 0;
-      }
-    }
     // Store knob values and push bools
     std::bitset<16> prevKnobBools;
     static std::bitset<16> knobBools = readKnobs();
@@ -189,15 +178,12 @@ void updateKeysTask(void * pvParameters) {
     for (int i=0; i<12; i++) {
       __atomic_store_n(&sysState.keyStrings[i], localKeyStrings[i], __ATOMIC_RELAXED);
     }
-    // Store key values globally
-    for (int i=0; i<12; i++) {
-      __atomic_store_n(&sysState.keyValues[i], localKeyValues[i], __ATOMIC_RELAXED);
-    }
     // Store knob values globally
     for (int i=0; i<4; i++){
       int tmp = sysState.knobValues[i]+localKnobDiffs[i];
       __atomic_store_n(&sysState.knobValues[i], tmp, __ATOMIC_RELAXED);
     }
+    __atomic_store_n(&sysState.octave, sysState.knobValues[1], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
     // Store knob pushes globally
     for (int i=0; i<4; i++){
       __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
@@ -220,20 +206,9 @@ void updateDisplayTask(void * pvParameters){
     //u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Display last CAN message
     u8g2.setCursor(2,10);
-    u8g2.print((char) RX_Message[0]);
-    u8g2.print(RX_Message[1]);
-    u8g2.print(RX_Message[2]);
-    //Display key values
-    // u8g2.setCursor(2,30);
-    // int localKeyValues[12];
-    // for (int i = 0; i<12; i++){
-    //   localKeyValues[i] = sysState.keyValues[i];
-    // }
-    // for (int i = 0; i<12; i++){
-    //   if (localKeyValues[i] != 0){
-    //     u8g2.print(localKeyValues[i]);
-    //   }
-    // }
+    u8g2.print((char) sysState.RX_Message[0]);
+    u8g2.print(sysState.RX_Message[1]);
+    u8g2.print(sysState.RX_Message[2]);
     //Display key names
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
@@ -270,29 +245,44 @@ void decodeMessageTask(void * pvParameters){
   uint8_t localRX_Message[8] = {0};
   while(1){
     xQueueReceive(msgInQ, localRX_Message, portMAX_DELAY);
-    for (int i=0; i<8; i++){__atomic_store_n(&RX_Message[i], localRX_Message[i], __ATOMIC_RELAXED);}
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    for (int i=0; i<8; i++){__atomic_store_n(&sysState.RX_Message[i], localRX_Message[i], __ATOMIC_RELAXED);}
+    xSemaphoreGive(sysState.mutex);
   }
 }
 
-// ISR to output sound
-void sampleISR() {
+//
+int32_t playNote(uint8_t oct, uint8_t note){
+  uint32_t volume = sysState.knobValues[0];
   static uint32_t phaseAcc = 0;
   uint32_t phaseAccChange = 0;
-  octave = sysState.knobValues[1]; //TODO: REMOVE ONCE ACTUAL OCTAVE CONTROL IN PLACE
-  for(int i=0; i<12; i++){
-    uint32_t phaseInc = (octave < 4) ? (sysState.keyValues[i] >> (4-octave)) : (sysState.keyValues[i] << (octave-4));
-    phaseAccChange += phaseInc;
-  }
+  uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
+  phaseAccChange += phaseInc;
   if (phaseAccChange==0){
     phaseAcc = 0;
   }
   else{
     phaseAcc += phaseAccChange;
   }
-  uint32_t volKnobValue;
-  __atomic_store_n(&volKnobValue, sysState.knobValues[0], __ATOMIC_RELAXED);
-  int32_t Vout = ((phaseAcc >> 24) - 128) >> (8-volKnobValue);
-  analogWrite(OUTR_PIN, Vout + 128);
+  return (((phaseAcc >> 24) - 128) >> (8-volume)) + 128;
+}
+
+// ISR to output sound
+void sampleISR() {
+  int32_t Vout;
+  // Play local keys
+  // for(int i=0; i<12; i++){
+  //   if(sysState.keyStrings[i] != '-'){Vout += playNote(octave, i);}
+  // }
+  // Play received keys
+  uint8_t localRX_Message[8];
+  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  for (int i=0; i<8; i++){__atomic_store_n(&localRX_Message[i], sysState.RX_Message[i], __ATOMIC_RELAXED);}
+  xSemaphoreGive(sysState.mutex);
+  if (localRX_Message[0] == 'P'){
+    Vout += playNote(localRX_Message[1], localRX_Message[2]);
+  }
+  analogWrite(OUTR_PIN, Vout);
 }
 
 // ISR to store incoming CAN RX messages
