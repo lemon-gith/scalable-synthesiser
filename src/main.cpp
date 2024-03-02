@@ -17,8 +17,10 @@ struct {
   volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
   SemaphoreHandle_t mutex;
 } sysState;
-volatile uint8_t TX_Message[8] = {0};
 volatile uint8_t octave = 4;
+volatile uint8_t TX_Message[8] = {0};
+volatile uint8_t RX_Message[8] = {0};
+QueueHandle_t msgInQ;
 //Pin definitions
   //Row select and enable
   const int RA0_PIN = D3;
@@ -209,8 +211,8 @@ void updateKeysTask(void * pvParameters) {
 void updateDisplayTask(void * pvParameters){
   const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
-  uint8_t RX_Message[8] = {0};
   while (1){
+    vTaskDelayUntil( &xLastWakeTime, xFrequency );
     //DISPLAY UPDATE
     u8g2.clearBuffer();         // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
@@ -259,13 +261,16 @@ void updateDisplayTask(void * pvParameters){
     // }
     //
     u8g2.sendBuffer();          // transfer internal memory to the display
-    // CAN RECEIVE
-    //uint8_t RX_Message[8] = {0};
-    uint32_t ID = 0x123;
-    while (CAN_CheckRXLevel())
-	    CAN_RX(ID, RX_Message);
-    //
     digitalToggle(LED_BUILTIN); //Toggle LED for CW requirement
+  }
+}
+
+// Decodes messages
+void decodeMessageTask(void * pvParameters){
+  uint8_t localRX_Message[8] = {0};
+  while(1){
+    xQueueReceive(msgInQ, localRX_Message, portMAX_DELAY);
+    for (int i=0; i<8; i++){__atomic_store_n(&RX_Message[i], localRX_Message[i], __ATOMIC_RELAXED);}
   }
 }
 
@@ -288,6 +293,14 @@ void sampleISR() {
   __atomic_store_n(&volKnobValue, sysState.knobValues[0], __ATOMIC_RELAXED);
   int32_t Vout = ((phaseAcc >> 24) - 128) >> (8-volKnobValue);
   analogWrite(OUTR_PIN, Vout + 128);
+}
+
+// ISR to store incoming CAN RX messages
+void CAN_RX_ISR (void) {
+	uint8_t RX_Message_ISR[8];
+	uint32_t ID;
+	CAN_RX(ID, RX_Message_ISR);
+	xQueueSendFromISR(msgInQ, RX_Message_ISR, NULL);
 }
 
 //Function to set outputs using key matrix
@@ -336,7 +349,9 @@ void setup() {
   //Initialise CAN
   CAN_Init(true);     //Set to true for loopback mode
   setCANFilter(0x123,0x7ff);    //ID, mask
+  CAN_RegisterRX_ISR(CAN_RX_ISR);
   CAN_Start();
+  msgInQ = xQueueCreate(36,8); //No. items, bytes
 
   //Initialise freeRTOS
   TaskHandle_t updateKeysHandle = NULL;
@@ -352,10 +367,19 @@ void setup() {
   xTaskCreate(
   updateDisplayTask,		/* Function that implements the task */
   "updateDisplay",		/* Text name for the task */
-  256,      		/* Stack size in words, not bytes */
+  128,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   1,			/* Task priority */
   &updateDisplayHandle );	/* Pointer to store the task handle */
+
+  TaskHandle_t decodeMessageHandle = NULL;
+  xTaskCreate(
+  decodeMessageTask,		/* Function that implements the task */
+  "decodeMessage",		/* Text name for the task */
+  64,      		/* Stack size in words, not bytes */
+  NULL,			/* Parameter passed into the task */
+  1,			/* Task priority */
+  &decodeMessageHandle );	/* Pointer to store the task handle */
 
   //Initialise hardware timer
   TIM_TypeDef *Instance = TIM1;
