@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
+#include <ES_CAN.h>
 #include <bitset>
 
 //Constants
@@ -132,6 +133,10 @@ void updateKeysTask(void * pvParameters) {
         TX_Message[2] = i;
       }
     }
+    // Send changes via CAN
+    uint8_t localTX_Message[8];
+    for (int i=0; i<8; i++){localTX_Message[i] = TX_Message[i];}
+    CAN_TX(0x123, localTX_Message);
     // Store step sizes locally
     uint32_t localKeyValues[12];
     for (int i = 0; i < 12; i++) {
@@ -204,16 +209,18 @@ void updateKeysTask(void * pvParameters) {
 void updateDisplayTask(void * pvParameters){
   const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
+  uint8_t RX_Message[8] = {0};
   while (1){
+    //DISPLAY UPDATE
     u8g2.clearBuffer();         // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
     //Header
     //u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Display last CAN message
     u8g2.setCursor(2,10);
-    u8g2.print((char) TX_Message[0]);
-    u8g2.print(TX_Message[1]);
-    u8g2.print(TX_Message[2]);
+    u8g2.print((char) RX_Message[0]);
+    u8g2.print(RX_Message[1]);
+    u8g2.print(RX_Message[2]);
     //Display key values
     // u8g2.setCursor(2,30);
     // int localKeyValues[12];
@@ -252,6 +259,12 @@ void updateDisplayTask(void * pvParameters){
     // }
     //
     u8g2.sendBuffer();          // transfer internal memory to the display
+    // CAN RECEIVE
+    //uint8_t RX_Message[8] = {0};
+    uint32_t ID = 0x123;
+    while (CAN_CheckRXLevel())
+	    CAN_RX(ID, RX_Message);
+    //
     digitalToggle(LED_BUILTIN); //Toggle LED for CW requirement
   }
 }
@@ -319,6 +332,11 @@ void setup() {
   //Initialise UART
   Serial.begin(9600);
   Serial.println("Hello World");
+
+  //Initialise CAN
+  CAN_Init(true);     //Set to true for loopback mode
+  setCANFilter(0x123,0x7ff);    //ID, mask
+  CAN_Start();
 
   //Initialise freeRTOS
   TaskHandle_t updateKeysHandle = NULL;
