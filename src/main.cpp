@@ -251,7 +251,9 @@ void sampleISR() {
   else{
     phaseAcc += phaseAccChange;
   }
-  int32_t Vout = (phaseAcc >> 24) - 128;
+  uint32_t volKnobValue;
+  __atomic_store_n(&volKnobValue, sysState.knobValues[0], __ATOMIC_RELAXED);
+  int32_t Vout = ((phaseAcc >> 24) - 128) >> (8-volKnobValue);
   analogWrite(OUTR_PIN, Vout + 128);
 }
 
