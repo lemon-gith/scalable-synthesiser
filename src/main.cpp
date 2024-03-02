@@ -7,15 +7,14 @@
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
+//System state variable arrays
+struct{
   volatile uint32_t keyValues[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
-  SemaphoreHandle_t keyValueMutex;
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
-  SemaphoreHandle_t keyStringsMutex;
   volatile uint32_t knobValues[4] = {50,50,50,50}; // K0 K1 K2 K3
-  SemaphoreHandle_t knobValuesMutex;
   volatile bool knobPushes[4] = {0,0,0,0};
-  SemaphoreHandle_t knobPushesMutex;
-
+  SemaphoreHandle_t mutex;
+} sysState;
 //Pin definitions
   //Row select and enable
   const int RA0_PIN = D3;
@@ -120,13 +119,13 @@ void updateKeysTask(void * pvParameters) {
         }
     }
     // Store step sizes locally
-    uint32_t localkeyValues[12];
+    uint32_t localKeyValues[12];
     for (int i = 0; i < 12; i++) {
       if (keyBools[i] == 0) {
-        localkeyValues[i] = stepSizes[i];
+        localKeyValues[i] = stepSizes[i];
       }
       else{
-        localkeyValues[i] = 0;
+        localKeyValues[i] = 0;
       }
     }
     // Store knob values and push bools
@@ -145,12 +144,12 @@ void updateKeysTask(void * pvParameters) {
       currBool[1] = knobBools[(2*i)+1];
       currBool[0] = knobBools[2*i];
       if(((prevBool == 0b00)and(currBool == 0b01))or((prevBool == 0b11)and(currBool == 0b10))){
-        localKnobDiffs[3-i] = (knobValues[3-i] < 100) ? 1 : 0;
-        lastLegalDiff[3-i] = (knobValues[3-i] < 100) ? 1 : 0;
+        localKnobDiffs[3-i] = (sysState.knobValues[3-i] < 100) ? 1 : 0;
+        lastLegalDiff[3-i] = (sysState.knobValues[3-i] < 100) ? 1 : 0;
       }
       else if(((prevBool == 0b01)and(currBool == 0b00))or((prevBool == 0b10)and(currBool == 0b11))){
-        localKnobDiffs[3-i] = (knobValues[3-i] > 0) ? -1 : 0;
-        lastLegalDiff[3-i] = (knobValues[3-i] > 0) ? -1 : 0;
+        localKnobDiffs[3-i] = (sysState.knobValues[3-i] > 0) ? -1 : 0;
+        lastLegalDiff[3-i] = (sysState.knobValues[3-i] > 0) ? -1 : 0;
       }
       else if(((prevBool == 0b00)and(currBool == 0b11))or((prevBool == 0b11)and(currBool == 0b00))or((prevBool == 0b01)and(currBool == 0b10))or((prevBool == 0b10)and(currBool == 0b01))){
         //other legal transition
@@ -158,36 +157,32 @@ void updateKeysTask(void * pvParameters) {
       }
       else{
         //illegal transition to help w skipping
-        localKnobDiffs[3-i] = 2*lastLegalDiff[3-i];
+        localKnobDiffs[3-i] = 5*lastLegalDiff[3-i];
       }
       //Knob pushes
       localKnobPushes[3-i] = !knobBools[i+8];
     }
+    //Store to sysState
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     // Store key string globally
-    xSemaphoreTake(keyStringsMutex, portMAX_DELAY);
     for (int i=0; i<12; i++) {
-      __atomic_store_n(&keyStrings[i], localKeyStrings[i], __ATOMIC_RELAXED);
+      __atomic_store_n(&sysState.keyStrings[i], localKeyStrings[i], __ATOMIC_RELAXED);
     }
-    xSemaphoreGive(keyStringsMutex);
     // Store key values globally
-    xSemaphoreTake(keyValueMutex, portMAX_DELAY);
     for (int i=0; i<12; i++) {
-      __atomic_store_n(&keyValues[i], localkeyValues[i], __ATOMIC_RELAXED);
+      __atomic_store_n(&sysState.keyValues[i], localKeyValues[i], __ATOMIC_RELAXED);
     }
-    xSemaphoreGive(keyValueMutex);
     // Store knob values globally
-    xSemaphoreTake(knobValuesMutex, portMAX_DELAY);
     for (int i=0; i<4; i++){
-      int tmp = knobValues[i]+localKnobDiffs[i];
-      __atomic_store_n(&knobValues[i], tmp, __ATOMIC_RELAXED);
+      int tmp = sysState.knobValues[i]+localKnobDiffs[i];
+      __atomic_store_n(&sysState.knobValues[i], tmp, __ATOMIC_RELAXED);
     }
-    xSemaphoreGive(knobValuesMutex);
     // Store knob pushes globally
-    xSemaphoreTake(knobPushesMutex, portMAX_DELAY);
     for (int i=0; i<4; i++){
-      __atomic_store_n(&knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
+      __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
     }
-    xSemaphoreGive(knobPushesMutex);
+    xSemaphoreGive(sysState.mutex);
+    //
   }
 }
 
@@ -204,7 +199,7 @@ void updateDisplayTask(void * pvParameters){
     // u8g2.setCursor(2,30);
     // int localKeyValues[12];
     // for (int i = 0; i<12; i++){
-    //   localKeyValues[i] = keyValues[i];
+    //   localKeyValues[i] = sysState.keyValues[i];
     // }
     // for (int i = 0; i<12; i++){
     //   if (localKeyValues[i] != 0){
@@ -215,22 +210,22 @@ void updateDisplayTask(void * pvParameters){
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
     for (int i=0; i<12; i++){
-      localKeyStrings[i] = keyStrings[i];
+      localKeyStrings[i] = sysState.keyStrings[i];
     }
     u8g2.drawStr(2,20,localKeyStrings);
     //Display knob values
     // int localKnobValues[4];
     // for (int i=0; i<4; i++){
-    //   localKnobValues[i] = knobValues[i];
+    //   localKnobValues[i] = sysState.knobValues[i];
     // }
     for (int i=0; i<4; i++){
       u8g2.setCursor((2+(35*i)),30);
-      u8g2.print(knobValues[i]);
+      u8g2.print(sysState.knobValues[i]);
     }
     //Display knob pushes
     // int localKnobPushes[4];
     // for (int i=0; i<4; i++){
-    //   localKnobPushes[i] = knobPushes[i];
+    //   localKnobPushes[i] = sysState.knobPushes[i];
     // }
     // for (int i=0; i<4; i++){
     //   u8g2.setCursor((2+(35*i)),30);
@@ -247,7 +242,7 @@ void sampleISR() {
   static uint32_t phaseAcc = 0;
   uint32_t phaseAccChange = 0;
   for(int i=0; i<12; i++){
-    phaseAccChange += keyValues[i];
+    phaseAccChange += sysState.keyValues[i];
   }
   if (phaseAccChange==0){
     phaseAcc = 0;
@@ -329,10 +324,10 @@ void setup() {
   sampleTimer->resume();
 
   //Set up mutexes
-  keyValueMutex = xSemaphoreCreateMutex();
-  keyStringsMutex = xSemaphoreCreateMutex();
-  knobValuesMutex = xSemaphoreCreateMutex();
-  knobPushesMutex = xSemaphoreCreateMutex();
+  sysState.mutex = xSemaphoreCreateMutex();
+  sysState.mutex = xSemaphoreCreateMutex();
+  sysState.mutex = xSemaphoreCreateMutex();
+  sysState.mutex = xSemaphoreCreateMutex();
 
   vTaskStartScheduler();
 }
