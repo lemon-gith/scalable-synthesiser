@@ -316,7 +316,7 @@ void setup() {
   xTaskCreate(
   updateKeysTask,		/* Function that implements the task */
   "updateKeys",		/* Text name for the task */
-  64,      		/* Stack size in words, not bytes */
+  128,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   2,			/* Task priority */
   &updateKeysHandle );	/* Pointer to store the task handle */
