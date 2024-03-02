@@ -364,7 +364,9 @@ void setup() {
   Serial.println("Hello World");
 
   //Initialise CAN
-  CAN_Init(false);     //Set to true for loopback mode
+  // NOTE: When the module is a sender, loopback must be set to true!
+  //       This is because without an ACK, the module will try to transmit forever.
+  CAN_Init(true);     //Set to true for loopback mode
   setCANFilter(0xd123,0x7ff);    //ID, mask
   CAN_RegisterRX_ISR(CAN_RX_ISR);
   CAN_RegisterTX_ISR(CAN_TX_ISR);
