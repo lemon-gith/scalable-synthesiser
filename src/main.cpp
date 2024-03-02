@@ -7,15 +7,17 @@
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
-  const uint32_t knobMaxes[4] = {8,3,5,4};
+  const uint32_t knobMaxes[4] = {8,8,5,4};
 //System state variable arrays
 struct {
   volatile uint32_t keyValues[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
   volatile uint32_t knobValues[4] = {knobMaxes[0],knobMaxes[1],knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
-  volatile bool knobPushes[4] = {0,0,0,0};
+  volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
   SemaphoreHandle_t mutex;
 } sysState;
+volatile uint8_t TX_Message[8] = {0};
+volatile uint8_t octave = 4;
 //Pin definitions
   //Row select and enable
   const int RA0_PIN = D3;
@@ -110,14 +112,25 @@ void updateKeysTask(void * pvParameters) {
     std::bitset<32> keyBools;
     keyBools = readKeys();
     // Store key string locally
-    char localKeyStrings[12];
+    static char localKeyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
+    char prevLocalKeyStrings[12];
+    for (int i=0; i<12; i++){prevLocalKeyStrings[i] = localKeyStrings[i];}
     for (int i = 0; i < 12; i++) {
-        if (keyBools[i] == 0) {
-            localKeyStrings[i] = keys[i];
-        }
-        else{
-          localKeyStrings[i] = '-';
-        }
+      if (keyBools[i] == 0) {
+        localKeyStrings[i] = keys[i];
+      }
+      else{
+        localKeyStrings[i] = '-';
+      }
+      //Check for changes
+      if (prevLocalKeyStrings[i] != localKeyStrings[i]){
+        bool isPush = (prevLocalKeyStrings[i] == '-');
+        TX_Message[0] = isPush ? 'P' : 'R';
+        uint8_t localOctave;
+        __atomic_store_n(&localOctave, octave, __ATOMIC_RELAXED);
+        TX_Message[1] = localOctave;
+        TX_Message[2] = i;
+      }
     }
     // Store step sizes locally
     uint32_t localKeyValues[12];
@@ -195,7 +208,12 @@ void updateDisplayTask(void * pvParameters){
     u8g2.clearBuffer();         // clear the internal memory
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
     //Header
-    u8g2.drawStr(2,10,"UNISYNTH Ltd.");
+    //u8g2.drawStr(2,10,"UNISYNTH Ltd.");
+    //Display last CAN message
+    u8g2.setCursor(2,10);
+    u8g2.print((char) TX_Message[0]);
+    u8g2.print(TX_Message[1]);
+    u8g2.print(TX_Message[2]);
     //Display key values
     // u8g2.setCursor(2,30);
     // int localKeyValues[12];
@@ -242,8 +260,10 @@ void updateDisplayTask(void * pvParameters){
 void sampleISR() {
   static uint32_t phaseAcc = 0;
   uint32_t phaseAccChange = 0;
+  octave = sysState.knobValues[1]; //TODO: REMOVE ONCE ACTUAL OCTAVE CONTROL IN PLACE
   for(int i=0; i<12; i++){
-    phaseAccChange += sysState.keyValues[i];
+    uint32_t phaseInc = (octave < 4) ? (sysState.keyValues[i] >> (4-octave)) : (sysState.keyValues[i] << (octave-4));
+    phaseAccChange += phaseInc;
   }
   if (phaseAccChange==0){
     phaseAcc = 0;
