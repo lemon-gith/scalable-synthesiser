@@ -1,4 +1,4 @@
-#include <Arduino.h>sysState.TX_Message
+#include <Arduino.h>
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
 #include <ES_CAN.h>
@@ -11,17 +11,18 @@
   const uint32_t knobMaxes[4] = {8,8,5,4};
 //System state variable arrays
 struct {
-  volatile uint8_t msgKeys [24]; // Maximum number of incoming keys; assume suitable for duet
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
-  volatile uint32_t knobValues[4] = {knobMaxes[0],knobMaxes[1],knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
+  volatile uint32_t knobValues[4] = {4,4,knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
   volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
   volatile uint8_t octave = 4;
   volatile uint8_t TX_Message[8] = {0};
   volatile uint8_t RX_Message[8] = {0};
+  volatile bool isSender = true;
   SemaphoreHandle_t mutex;
 } sysState;
-
 QueueHandle_t msgInQ;
+QueueHandle_t msgOutQ;
+SemaphoreHandle_t CAN_TX_Semaphore;
 //Pin definitions
   //Row select and enable
   const int RA0_PIN = D3;
@@ -129,15 +130,18 @@ void updateKeysTask(void * pvParameters) {
       //Check for changes
       if (prevLocalKeyStrings[i] != localKeyStrings[i]){
         bool isPush = (prevLocalKeyStrings[i] == '-');
+        xSemaphoreTake(sysState.mutex, portMAX_DELAY);
         sysState.TX_Message[0] = isPush ? 'P' : 'R';
         sysState.TX_Message[1] = sysState.octave;
         sysState.TX_Message[2] = i;
+        xSemaphoreGive(sysState.mutex);
       }
     }
+    Serial.print(localKeyStrings[0]);
     // Send changes via CAN
     uint8_t localTX_Message[8];
     for (int i=0; i<8; i++){localTX_Message[i] = sysState.TX_Message[i];}
-    CAN_TX(0x123, localTX_Message);
+    xQueueSend( msgOutQ, localTX_Message, portMAX_DELAY);
     // Store knob values and push bools
     std::bitset<16> prevKnobBools;
     static std::bitset<16> knobBools = readKnobs();
@@ -204,8 +208,14 @@ void updateDisplayTask(void * pvParameters){
     u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
     //Header
     //u8g2.drawStr(2,10,"UNISYNTH Ltd.");
-    //Display last CAN message
+    //Display last sent/received CAN message
     u8g2.setCursor(2,10);
+    u8g2.print("TX:");
+    u8g2.print((char) sysState.TX_Message[0]);
+    u8g2.print(sysState.TX_Message[1]);
+    u8g2.print(sysState.TX_Message[2]);
+    u8g2.setCursor(52, 10);
+    u8g2.print("RX:");
     u8g2.print((char) sysState.RX_Message[0]);
     u8g2.print(sysState.RX_Message[1]);
     u8g2.print(sysState.RX_Message[2]);
@@ -251,7 +261,17 @@ void decodeMessageTask(void * pvParameters){
   }
 }
 
-//
+// Sends messages from queue
+void CAN_TX_Task (void * pvParameters) {
+	uint8_t msgOut[8];
+	while (1) {
+		xQueueReceive(msgOutQ, msgOut, portMAX_DELAY);
+		xSemaphoreTake(CAN_TX_Semaphore, portMAX_DELAY);
+		CAN_TX(0x123, msgOut);
+	}
+}
+
+// Given an octave and note index, plays the note
 int32_t playNote(uint8_t oct, uint8_t note){
   uint32_t volume = sysState.knobValues[0];
   static uint32_t phaseAcc = 0;
@@ -269,16 +289,14 @@ int32_t playNote(uint8_t oct, uint8_t note){
 
 // ISR to output sound
 void sampleISR() {
-  int32_t Vout;
+  int32_t Vout = 0;
   // Play local keys
   // for(int i=0; i<12; i++){
   //   if(sysState.keyStrings[i] != '-'){Vout += playNote(octave, i);}
   // }
   // Play received keys
   uint8_t localRX_Message[8];
-  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-  for (int i=0; i<8; i++){__atomic_store_n(&localRX_Message[i], sysState.RX_Message[i], __ATOMIC_RELAXED);}
-  xSemaphoreGive(sysState.mutex);
+  for (int i=0; i<8; i++){localRX_Message[i] = sysState.RX_Message[i];}
   if (localRX_Message[0] == 'P'){
     Vout += playNote(localRX_Message[1], localRX_Message[2]);
   }
@@ -291,6 +309,11 @@ void CAN_RX_ISR (void) {
 	uint32_t ID;
 	CAN_RX(ID, RX_Message_ISR);
 	xQueueSendFromISR(msgInQ, RX_Message_ISR, NULL);
+}
+
+// ISR to give the semaphore once mailbox available
+void CAN_TX_ISR (void) {
+	xSemaphoreGiveFromISR(CAN_TX_Semaphore, NULL);
 }
 
 //Function to set outputs using key matrix
@@ -338,19 +361,22 @@ void setup() {
 
   //Initialise CAN
   CAN_Init(true);     //Set to true for loopback mode
-  setCANFilter(0x123,0x7ff);    //ID, mask
+  setCANFilter(0xd123,0x7ff);    //ID, mask
   CAN_RegisterRX_ISR(CAN_RX_ISR);
+  CAN_RegisterTX_ISR(CAN_TX_ISR);
   CAN_Start();
   msgInQ = xQueueCreate(36,8); //No. items, bytes
+  msgOutQ = xQueueCreate(36,8);
+  CAN_TX_Semaphore = xSemaphoreCreateCounting(3,3);
 
   //Initialise freeRTOS
   TaskHandle_t updateKeysHandle = NULL;
   xTaskCreate(
   updateKeysTask,		/* Function that implements the task */
   "updateKeys",		/* Text name for the task */
-  128,      		/* Stack size in words, not bytes */
+  64,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
-  2,			/* Task priority */
+  4,			/* Task priority */
   &updateKeysHandle );	/* Pointer to store the task handle */
 
   TaskHandle_t updateDisplayHandle = NULL;
@@ -368,8 +394,17 @@ void setup() {
   "decodeMessage",		/* Text name for the task */
   64,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
-  1,			/* Task priority */
+  2,			/* Task priority */
   &decodeMessageHandle );	/* Pointer to store the task handle */
+
+  TaskHandle_t CAN_TXHandle = NULL;
+  xTaskCreate(
+  CAN_TX_Task,		/* Function that implements the task */
+  "CAN_TX",		/* Text name for the task */
+  64,      		/* Stack size in words, not bytes */
+  NULL,			/* Parameter passed into the task */
+  3,			/* Task priority */
+  &CAN_TXHandle );	/* Pointer to store the task handle */
 
   //Initialise hardware timer
   TIM_TypeDef *Instance = TIM1;
@@ -380,10 +415,6 @@ void setup() {
 
   //Set up mutexes
   sysState.mutex = xSemaphoreCreateMutex();
-  sysState.mutex = xSemaphoreCreateMutex();
-  sysState.mutex = xSemaphoreCreateMutex();
-  sysState.mutex = xSemaphoreCreateMutex();
-
   vTaskStartScheduler();
 }
 
