@@ -14,10 +14,12 @@ struct {
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
   volatile uint32_t knobValues[4] = {4,4,knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
   volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
+  volatile short joy[3]= {0,0,0};
   volatile uint8_t octave = 4;
   volatile uint8_t TX_Message[8] = {0};
   volatile uint8_t RX_Message[8] = {0};
   volatile bool isSender = true;
+  volatile uint8_t met = 120;
   SemaphoreHandle_t mutex;
 } sysState;
 QueueHandle_t msgInQ;
@@ -55,6 +57,7 @@ SemaphoreHandle_t CAN_TX_Semaphore;
 U8G2_SSD1305_128X32_ADAFRUIT_F_HW_I2C u8g2(U8G2_R0);
 
 //Big Endian
+//Big Endian
 std::bitset<4> readCols(){
   std::bitset<4> result;
   result[3] = digitalRead(C3_PIN);
@@ -90,8 +93,8 @@ std::bitset<32> readKeys() {
 }
 
 // Output in zero-indexed array order {3A 3B 2A 2B 1A 1B 0A 0B 3S 2S 1S 0S}
-std::bitset<16> readKnobs(){
-  std::bitset<16> knobVals;  
+std::bitset<12> readKnobs(){
+  std::bitset<12> knobVals;  
   for (int i = 3; i < 7; i++){
     std::bitset<4> rowVals = readRow(i);
     if ((3<=i)&(i<5)){ //A&B vals
@@ -106,6 +109,27 @@ std::bitset<16> readKnobs(){
     }
   }
   return knobVals;
+}
+
+char calcJoy(short x, short y, short p){ //calculates the direction of the joystick (goes from 0 to 1024)
+  if(p==0){
+    return 'p';
+  }
+  else if(x<300 && (y<600&&y>200)){
+    return 'r';
+  }
+  else if (x>700&&(y<600&&y>200)){
+    return 'l';
+  }
+  else if ((x<600&&x>200)&&y<200){
+    return 'u';
+  }
+  else if ((x<600&&x>200)&&y>700){
+    return 'd';
+  }
+  else{
+    return 's';
+  }
 }
 
 // TIMED TASKS
@@ -137,7 +161,7 @@ void updateKeysTask(void * pvParameters) {
         xSemaphoreGive(sysState.mutex);
       }
     }
-    Serial.print(localKeyStrings[0]); //TODO: Remove after debug
+    //Serial.print(localKeyStrings[0]); //TODO: Remove after debug
     // Send changes via CAN
     if (sysState.isSender == true){
       uint8_t localTX_Message[8];
@@ -145,8 +169,8 @@ void updateKeysTask(void * pvParameters) {
       xQueueSend( msgOutQ, localTX_Message, portMAX_DELAY);
     }
     // Store knob values and push bools
-    std::bitset<16> prevKnobBools;
-    static std::bitset<16> knobBools = readKnobs();
+    std::bitset<12> prevKnobBools;
+    static std::bitset<12> knobBools = readKnobs();
     prevKnobBools = knobBools;
     knobBools = readKnobs();
     int localKnobDiffs[4] = {0,0,0,0};
@@ -178,6 +202,8 @@ void updateKeysTask(void * pvParameters) {
       //Knob pushes
       localKnobPushes[3-i] = !knobBools[i+8];
     }
+    //see joystick push
+    std::bitset<4> rowVals = readRow(5);
     //Store to sysState
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     // Store key string globally
@@ -194,6 +220,10 @@ void updateKeysTask(void * pvParameters) {
     for (int i=0; i<4; i++){
       __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
     }
+    //Store Joystick Values
+    sysState.joy[0] = analogRead(JOYX_PIN);
+    sysState.joy[1] = analogRead(JOYY_PIN);
+    sysState.joy[2] = rowVals[2];
     xSemaphoreGive(sysState.mutex);
     //
   }
@@ -206,48 +236,73 @@ void updateDisplayTask(void * pvParameters){
   while (1){
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
     //DISPLAY UPDATE
+    vTaskDelayUntil( &xLastWakeTime, xFrequency );
+    //DISPLAY UPDATE
     u8g2.clearBuffer();         // clear the internal memory
-    u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
+    u8g2.setFont(u8g2_font_u8glib_4_tf); // choose a suitable font
     //Header
     //u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Display last sent/received CAN message
-    u8g2.setCursor(2,10);
-    u8g2.print("TX:");
-    u8g2.print((char) sysState.TX_Message[0]);
-    u8g2.print(sysState.TX_Message[1]);
-    u8g2.print(sysState.TX_Message[2]);
-    u8g2.setCursor(52, 10);
-    u8g2.print("RX:");
-    u8g2.print((char) sysState.RX_Message[0]);
-    u8g2.print(sysState.RX_Message[1]);
-    u8g2.print(sysState.RX_Message[2]);
+    u8g2.drawFrame(0, -2, 56, 8);
     //Display key names
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
-    for (int i=0; i<12; i++){
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    for (int i = 0; i<12; i++){
       localKeyStrings[i] = sysState.keyStrings[i];
     }
-    u8g2.drawStr(2,20,localKeyStrings);
-    //Display knob values
-    // int localKnobValues[4];
-    // for (int i=0; i<4; i++){
-    //   localKnobValues[i] = sysState.knobValues[i];
-    // }
-    for (int i=0; i<4; i++){
-      u8g2.setCursor((2+(35*i)),30);
-      u8g2.print(sysState.knobValues[i]);
-    }
-    //Display knob pushes
-    // int localKnobPushes[4];
-    // for (int i=0; i<4; i++){
-    //   localKnobPushes[i] = sysState.knobPushes[i];
-    // }
-    // for (int i=0; i<4; i++){
-    //   u8g2.setCursor((2+(35*i)),30);
-    //   u8g2.print(localKnobPushes[i]);
-    // }
-    //
+    xSemaphoreGive(sysState.mutex);
+    u8g2.drawStr(2,4,localKeyStrings);
+    //Octave
+    u8g2.drawStr(2, 12, "OCT:");
+    u8g2.setCursor(20, 12);
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    u8g2.print(sysState.octave);
+    u8g2.setCursor(30,12);
+    u8g2.print(sysState.TX_Message[0]);
+    xSemaphoreGive(sysState.mutex);
+    //Metronome
+    u8g2.drawStr(60,4, "Met");
+    u8g2.drawStr(75,4,"<");
+    u8g2.setCursor(79, 4);
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    u8g2.print(sysState.met);
+    xSemaphoreGive(sysState.mutex);
+    u8g2.drawStr(92, 4, "BPM");
+    u8g2.drawStr(110,4,">");
+    u8g2.drawStr(114,4,"ON");
+    //Playback
+    u8g2.drawStr(60, 12, "Pb");
+    u8g2.drawCircle(78, 10, 3);
+    u8g2.drawBox(88, 8, 5, 5);
+    u8g2.drawTriangle(100, 7, 100, 13, 103, 10);
+
+    //Bottom Menu
+    //Volume
+    u8g2.drawStr(10, 20, "Vol");
+    u8g2.drawFrame(1, 22, 28, 12);
+    u8g2.setCursor(1+14-5, 29);
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    u8g2.print(sysState.knobValues[0]);
+    u8g2.setCursor(16, 29);
+    u8g2.print(calcJoy(sysState.joy[0], sysState.joy[1], sysState.joy[2]));
+    xSemaphoreGive(sysState.mutex);
+    //Tone
+    u8g2.drawStr(40, 20, "Tone");
+    u8g2.drawFrame(33, 22, 28, 12);
+    u8g2.drawStr(33+14-5, 29, "sin");
+    //Setting
+    u8g2.drawStr(66, 20, "Setting");
+    u8g2.drawFrame(65, 22, 28, 12);
+    u8g2.drawStr(65+14-5, 29, "Vib");
+    //Echo
+    u8g2.drawStr(104, 20, "Echo");
+    u8g2.drawFrame(97, 22, 28, 12);
+    u8g2.drawStr(97+14-5, 29, "Rev");
+    //TODO: Add a centering function framex+(dist-2)-(floor(word/2))
+    //      Word should b 3*(char len+1) - 1  
     u8g2.sendBuffer();          // transfer internal memory to the display
+    //Toggle LED
     digitalToggle(LED_BUILTIN); //Toggle LED for CW requirement
   }
 }
@@ -272,6 +327,7 @@ void CAN_TX_Task (void * pvParameters) {
 		CAN_TX(0x123, msgOut);
 	}
 }
+
 
 // Given an octave and note index, plays the note
 int32_t playNote(uint8_t oct, uint8_t note){
@@ -380,7 +436,7 @@ void setup() {
   xTaskCreate(
   updateKeysTask,		/* Function that implements the task */
   "updateKeys",		/* Text name for the task */
-  64,      		/* Stack size in words, not bytes */
+  128,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   4,			/* Task priority */
   &updateKeysHandle );	/* Pointer to store the task handle */
@@ -389,7 +445,7 @@ void setup() {
   xTaskCreate(
   updateDisplayTask,		/* Function that implements the task */
   "updateDisplay",		/* Text name for the task */
-  128,      		/* Stack size in words, not bytes */
+  1024,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
   1,			/* Task priority */
   &updateDisplayHandle );	/* Pointer to store the task handle */
