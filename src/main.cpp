@@ -2,6 +2,7 @@
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
 #include <ES_CAN.h>
+#include <ES_CAN.h>
 #include <bitset>
 #include <string>
 
@@ -57,6 +58,7 @@ SemaphoreHandle_t CAN_TX_Semaphore;
 //Display driver object
 U8G2_SSD1305_128X32_ADAFRUIT_F_HW_I2C u8g2(U8G2_R0);
 
+//Big Endian
 //Big Endian
 std::bitset<4> readCols(){
   std::bitset<4> result;
@@ -140,6 +142,10 @@ void updateKeysTask(void * pvParameters) {
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
     std::bitset<32> keyBools;
     keyBools = readKeys();
+    // Store key string locally
+    static char localKeyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
+    char prevLocalKeyStrings[12];
+    for (int i=0; i<12; i++){prevLocalKeyStrings[i] = localKeyStrings[i];}
     // Store key string locally
     static char localKeyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
     char prevLocalKeyStrings[12];
@@ -230,10 +236,13 @@ void updateKeysTask(void * pvParameters) {
 }
 
 // Refreshes display
+// Refreshes display
 void updateDisplayTask(void * pvParameters){
   const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
+    vTaskDelayUntil( &xLastWakeTime, xFrequency );
+    //DISPLAY UPDATE
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
     //DISPLAY UPDATE
     u8g2.clearBuffer();         // clear the internal memory
@@ -305,6 +314,30 @@ void updateDisplayTask(void * pvParameters){
   }
 }
 
+// Decodes messages
+void decodeMessageTask(void * pvParameters){
+  uint8_t localRX_Message[8] = {0};
+  while(1){
+    xQueueReceive(msgInQ, localRX_Message, portMAX_DELAY);
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    for (int i=0; i<8; i++){__atomic_store_n(&sysState.RX_Message[i], localRX_Message[i], __ATOMIC_RELAXED);}
+    xSemaphoreGive(sysState.mutex);
+  }
+}
+
+// Sends messages from queue
+void CAN_TX_Task (void * pvParameters) {
+	uint8_t msgOut[8];
+	while (1) {
+		xQueueReceive(msgOutQ, msgOut, portMAX_DELAY);
+		xSemaphoreTake(CAN_TX_Semaphore, portMAX_DELAY);
+		CAN_TX(0x123, msgOut);
+	}
+}
+
+// Given an octave and note index, plays the note
+int32_t playNote(uint8_t oct, uint8_t note){
+  uint32_t volume = sysState.knobValues[0];
 // Decodes messages
 void decodeMessageTask(void * pvParameters){
   uint8_t localRX_Message[8] = {0};
@@ -430,11 +463,14 @@ void setup() {
 
   //Initialise freeRTOS
   TaskHandle_t updateKeysHandle = NULL;
+  TaskHandle_t updateKeysHandle = NULL;
   xTaskCreate(
   updateKeysTask,		/* Function that implements the task */
   "updateKeys",		/* Text name for the task */
   128,      		/* Stack size in words, not bytes */
   NULL,			/* Parameter passed into the task */
+  4,			/* Task priority */
+  &updateKeysHandle );	/* Pointer to store the task handle */
   4,			/* Task priority */
   &updateKeysHandle );	/* Pointer to store the task handle */
 
