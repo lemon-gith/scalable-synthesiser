@@ -18,7 +18,7 @@ struct {
   volatile uint8_t octave = 4;
   volatile uint8_t TX_Message[8] = {0};
   volatile uint8_t RX_Message[8] = {0};
-  volatile bool isSender = true;
+  volatile bool isSender = false;
   volatile uint8_t met = 120;
   SemaphoreHandle_t mutex;
 } sysState;
@@ -236,12 +236,8 @@ void updateDisplayTask(void * pvParameters){
   while (1){
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
     //DISPLAY UPDATE
-    vTaskDelayUntil( &xLastWakeTime, xFrequency );
-    //DISPLAY UPDATE
     u8g2.clearBuffer();         // clear the internal memory
     u8g2.setFont(u8g2_font_u8glib_4_tf); // choose a suitable font
-    //Header
-    //u8g2.drawStr(2,10,"UNISYNTH Ltd.");
     //Display last sent/received CAN message
     u8g2.drawFrame(0, -2, 56, 8);
     //Display key names
