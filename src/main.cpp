@@ -2,9 +2,7 @@
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
 #include <ES_CAN.h>
-#include <ES_CAN.h>
 #include <bitset>
-#include <string>
 
 //Constants
   const uint32_t interval = 100; //Display update interval
