@@ -8,11 +8,13 @@
   const uint32_t interval = 100; //Display update interval
   const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
   const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
-  const uint32_t knobMaxes[4] = {8,8,5,4};
+  const char* toneNames [] = {"saw", "sqr", "sin", "tri"};
+  const uint32_t knobMaxes[4] = {8,(sizeof(toneNames)/sizeof(toneNames[0]))-1,5,4};
+
 //System state variable arrays
 struct {
   volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
-  volatile uint32_t knobValues[4] = {4,4,knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
+  volatile uint32_t knobValues[4] = {4,0,knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
   volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
   volatile short joy[3]= {0,0,0};
   volatile uint8_t octave = 4;
@@ -222,7 +224,7 @@ void updateKeysTask(void * pvParameters) {
       int tmp = sysState.knobValues[i]+localKnobDiffs[i];
       __atomic_store_n(&sysState.knobValues[i], tmp, __ATOMIC_RELAXED);
     }
-    __atomic_store_n(&sysState.octave, sysState.knobValues[1], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
+    __atomic_store_n(&sysState.octave, sysState.knobValues[2], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
     // Store knob pushes globally
     for (int i=0; i<4; i++){
       __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
@@ -291,7 +293,9 @@ void updateDisplayTask(void * pvParameters){
     //Tone
     u8g2.drawStr(40, 20, "Tone");
     u8g2.drawFrame(33, 22, 28, 12);
-    u8g2.drawStr(33+14-5, 29, "sin");
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    u8g2.drawStr(33+14-5, 29, toneNames[sysState.knobValues[1]]);
+    xSemaphoreGive(sysState.mutex);
     //Setting
     u8g2.drawStr(66, 20, "Setting");
     u8g2.drawFrame(65, 22, 28, 12);
@@ -330,19 +334,33 @@ void CAN_TX_Task (void * pvParameters) {
 }
 
 
-// Given an octave and note index, plays the note
-int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume){
-  static uint32_t phaseAcc = 0;
-  uint32_t phaseAccChange = 0;
-  uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
-  phaseAccChange += phaseInc;
-  if (phaseAccChange==0){
-    phaseAcc = 0;
+// Given an octave, note index, volume, and tone, plays the note
+int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
+  // FUNCTION WAVES
+  if((tone == 0)|(tone == 1)){ //SAWTOOTH OR SQUARE
+    static uint32_t phaseAcc = 0;
+    uint32_t phaseAccChange = 0;
+    uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
+    phaseAccChange += phaseInc;
+    if (phaseAccChange==0){
+      phaseAcc = 0;
+    }
+    else{
+      phaseAcc += phaseAccChange;
+    }
+    uint32_t phaseOut = (((phaseAcc >> 24) - 128) >> (8-volume)) + 128;
+    if (tone == 0){ //SAWTOOTH
+      return phaseOut;
+    }
+    else{ //SQUARE
+      if (phaseOut < 128){
+        return 0;
+      }
+      else{
+        return 255;
+      }
+    }
   }
-  else{
-    phaseAcc += phaseAccChange;
-  }
-  return (((phaseAcc >> 24) - 128) >> (8-volume)) + 128;
 }
 
 // ISR to output sound
@@ -350,16 +368,17 @@ void sampleISR() {
   if (sysState.isSender != true){ //Only receivers output sound
     int32_t Vout = 0;
     uint32_t localVolume = __atomic_load_n(&sysState.knobValues[0], __ATOMIC_RELAXED);
+    uint32_t localTone = __atomic_load_n(&sysState.knobValues[1], __ATOMIC_RELAXED);
     //Play local keys
     for(int i=0; i<12; i++){
       char localCurrentKeystring = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
-      if(localCurrentKeystring != '-'){Vout += playNote(sysState.octave, i, localVolume);}
+      if(localCurrentKeystring != '-'){Vout += playNote(sysState.octave, i, localVolume, localTone);}
     }
     // Play received keys
     uint8_t localRX_Message[8];
     for (int i=0; i<8; i++){localRX_Message[i] = __atomic_load_n(&sysState.RX_Message[i], __ATOMIC_RELAXED);}
     if (localRX_Message[0] == 'P'){
-      Vout += playNote(localRX_Message[1], localRX_Message[2], localVolume);
+      Vout += playNote(localRX_Message[1], localRX_Message[2], localVolume, localTone);
     }
     analogWrite(OUTR_PIN, Vout);
   }
