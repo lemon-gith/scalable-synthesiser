@@ -161,13 +161,15 @@ void updateKeysTask(void * pvParameters) {
         xSemaphoreGive(sysState.mutex);
       }
     }
-    //Serial.print(localKeyStrings[0]); //TODO: Remove after debug
     // Send changes via CAN
-    if (sysState.isSender == true){
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    bool localIsSender = __atomic_load_n(&sysState.isSender, __ATOMIC_RELAXED);
+    if (localIsSender == true){
       uint8_t localTX_Message[8];
-      for (int i=0; i<8; i++){localTX_Message[i] = sysState.TX_Message[i];}
+      for (int i=0; i<8; i++){localTX_Message[i] = __atomic_load_n(&sysState.TX_Message[i], __ATOMIC_RELAXED);}
       xQueueSend( msgOutQ, localTX_Message, portMAX_DELAY);
     }
+    xSemaphoreGive(sysState.mutex);
     // Store knob values and push bools
     std::bitset<12> prevKnobBools;
     static std::bitset<12> knobBools = readKnobs();
@@ -183,13 +185,18 @@ void updateKeysTask(void * pvParameters) {
       prevBool[0] = prevKnobBools[2*i];
       currBool[1] = knobBools[(2*i)+1];
       currBool[0] = knobBools[2*i];
+      // Read sys knob values
+      uint32_t localKnobValues[4];
+      xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+      for (int i=0; i<4; i++){localKnobValues[i] = __atomic_load_n(&sysState.knobValues[i], __ATOMIC_RELAXED);}
+      xSemaphoreGive(sysState.mutex);
       if(((prevBool == 0b00)and(currBool == 0b01))or((prevBool == 0b11)and(currBool == 0b10))){
-        localKnobDiffs[3-i] = (sysState.knobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
-        lastLegalDiff[3-i] = (sysState.knobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
+        localKnobDiffs[3-i] = (localKnobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
+        lastLegalDiff[3-i] = (localKnobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
       }
       else if(((prevBool == 0b01)and(currBool == 0b00))or((prevBool == 0b10)and(currBool == 0b11))){
-        localKnobDiffs[3-i] = (sysState.knobValues[3-i] > 0) ? -1 : 0;
-        lastLegalDiff[3-i] = (sysState.knobValues[3-i] > 0) ? -1 : 0;
+        localKnobDiffs[3-i] = (localKnobValues[3-i] > 0) ? -1 : 0;
+        lastLegalDiff[3-i] = (localKnobValues[3-i] > 0) ? -1 : 0;
       }
       else if(((prevBool == 0b00)and(currBool == 0b11))or((prevBool == 0b11)and(currBool == 0b00))or((prevBool == 0b01)and(currBool == 0b10))or((prevBool == 0b10)and(currBool == 0b01))){
         //other legal transition
@@ -244,9 +251,7 @@ void updateDisplayTask(void * pvParameters){
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    for (int i = 0; i<12; i++){
-      localKeyStrings[i] = sysState.keyStrings[i];
-    }
+    for (int i = 0; i<12; i++){localKeyStrings[i] = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);}
     xSemaphoreGive(sysState.mutex);
     u8g2.drawStr(2,4,localKeyStrings);
     //Octave
@@ -309,7 +314,7 @@ void decodeMessageTask(void * pvParameters){
   while(1){
     xQueueReceive(msgInQ, localRX_Message, portMAX_DELAY);
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    for (int i=0; i<8; i++){__atomic_store_n(&sysState.RX_Message[i], localRX_Message[i], __ATOMIC_RELAXED);}
+    for (int i=0; i<8; i++){sysState.RX_Message[i] = __atomic_load_n(&localRX_Message[i], __ATOMIC_RELAXED);}
     xSemaphoreGive(sysState.mutex);
   }
 }
@@ -326,8 +331,7 @@ void CAN_TX_Task (void * pvParameters) {
 
 
 // Given an octave and note index, plays the note
-int32_t playNote(uint8_t oct, uint8_t note){
-  uint32_t volume = sysState.knobValues[0];
+int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume){
   static uint32_t phaseAcc = 0;
   uint32_t phaseAccChange = 0;
   uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
@@ -345,15 +349,17 @@ int32_t playNote(uint8_t oct, uint8_t note){
 void sampleISR() {
   if (sysState.isSender != true){ //Only receivers output sound
     int32_t Vout = 0;
+    uint32_t localVolume = __atomic_load_n(&sysState.knobValues[0], __ATOMIC_RELAXED);
     //Play local keys
     for(int i=0; i<12; i++){
-      if(sysState.keyStrings[i] != '-'){Vout += playNote(sysState.octave, i);}
+      char localCurrentKeystring = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
+      if(localCurrentKeystring != '-'){Vout += playNote(sysState.octave, i, localVolume);}
     }
     // Play received keys
     uint8_t localRX_Message[8];
-    for (int i=0; i<8; i++){localRX_Message[i] = sysState.RX_Message[i];}
+    for (int i=0; i<8; i++){localRX_Message[i] = __atomic_load_n(&sysState.RX_Message[i], __ATOMIC_RELAXED);}
     if (localRX_Message[0] == 'P'){
-      Vout += playNote(localRX_Message[1], localRX_Message[2]);
+      Vout += playNote(localRX_Message[1], localRX_Message[2], localVolume);
     }
     analogWrite(OUTR_PIN, Vout);
   }
