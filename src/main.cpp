@@ -339,25 +339,27 @@ void updateDisplayTask(void * pvParameters){
     //Display key names
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY); //Take all the necessary variables
     for (int i = 0; i<12; i++){localKeyStrings[i] = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);}
+    uint8_t localOctave = sysState.octave; 
+    uint8_t localSendState = sysState.TX_Message[0];
+    uint8_t localMetValue = sysState.met;
+    bool metOnState = sysState.metOnState;
+    uint8_t localMenuState = sysState.menuState;
+    bool localIsSelected = sysState.isSelected;
+    const char* localToneNames = toneNames[sysState.knobValues[1]];
     xSemaphoreGive(sysState.mutex);
     u8g2.drawStr(2,4,localKeyStrings);
     //Octave
     u8g2.drawStr(2, 12, "OCT:");
     u8g2.setCursor(20, 12);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.octave);
+    u8g2.print(localOctave);
     u8g2.setCursor(30,12);
-    u8g2.print(sysState.TX_Message[0]);
-    xSemaphoreGive(sysState.mutex);
+    u8g2.print(localSendState);
     //Metronome
     u8g2.drawStr(60,4, "Met:");
     u8g2.setCursor(79, 4);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.met);
-    bool metOnState = sysState.metOnState;
-    xSemaphoreGive(sysState.mutex);
+    u8g2.print(localMetValue);
     u8g2.drawStr(92, 4, "BPM");
     u8g2.setCursor(114, 4);
     u8g2.print(metOnState ? "OFF": "ON");
@@ -372,19 +374,14 @@ void updateDisplayTask(void * pvParameters){
     u8g2.drawStr(10, 20, "Vol");
     u8g2.drawFrame(1, 22, 28, 12);
     u8g2.setCursor(1+14-5, 29);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.menuState);
-    bool isClicked = sysState.isSelected;
-    xSemaphoreGive(sysState.mutex);
+    u8g2.print(localMenuState);
     u8g2.setCursor(16, 29);
-    u8g2.print(isClicked ? 't':'f');
+    u8g2.print(localIsSelected ? 't':'f');
 
     //Tone
     u8g2.drawStr(40, 20, "Tone");
     u8g2.drawFrame(33, 22, 28, 12);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.drawStr(33+14-5, 29, toneNames[sysState.knobValues[1]]);
-    xSemaphoreGive(sysState.mutex);
+    u8g2.drawStr(33+14-5, 29, localToneNames);
     //Setting
     u8g2.drawStr(66, 20, "Setting");
     u8g2.drawFrame(65, 22, 28, 12);
