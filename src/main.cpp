@@ -127,10 +127,20 @@ void navigate(char direction){
     if(menuState==0){
       if(!metMenuState){
         if(direction == 'u'){
+          if(metValue==200){
+            metValue=0;
+          }
+          else{
           metValue++;
+          }
         }
         else if(direction == 'd'){
-          metValue--;
+          if(metValue==0){
+            metValue=200;
+          }
+          else{
+            metValue--;
+          }
         }
         else if(direction == 'r'){
           metMenuState=!metMenuState;
@@ -152,10 +162,16 @@ void navigate(char direction){
         if(octave<8){
           octave++;
         }
+        else if (octave==8){
+          octave = 0;
+        }
       }
       else if(direction=='d'){
         if(octave>0){
           octave--;
+        }
+        else if(octave==0){
+          octave = 8;
         }
       }
     }
@@ -306,6 +322,7 @@ void updateDisplayTask(void * pvParameters){
     uint8_t localMenuState = sysState.menuState;
     bool localIsSelected = sysState.isSelected;
     const char* localToneNames = toneNames[sysState.knobValues[1]];
+    uint32_t localVolValue = sysState.knobValues[0]; 
     for(int i=0; i<sizeof(sysState.dotLocation); i++){
       localDotLoc[i] = sysState.dotLocation[i];
     }
@@ -327,16 +344,16 @@ void updateDisplayTask(void * pvParameters){
     u8g2.print(metOnState ? "OFF": "ON");
     //Playback
     u8g2.drawStr(62, 12, "Rec:");
-    u8g2.drawCircle(80, 10, 3);
-    u8g2.drawBox(88, 8, 5, 5);
-    u8g2.drawTriangle(100, 7, 100, 13, 103, 10);
+    u8g2.drawCircle(86, 10, 2);
+    u8g2.drawBox(97, 8, 5, 5);
+    u8g2.drawTriangle(110, 7, 110, 13, 114, 10);
 
     //Bottom Menu
     //Volume
     u8g2.drawStr(10, 20, "Vol");
     u8g2.drawFrame(1, 22, 28, 12);
     u8g2.setCursor(1+14-5, 29);
-    u8g2.print(localMenuState);
+    u8g2.print(localVolValue);
     u8g2.setCursor(16, 29);
     u8g2.print(localIsSelected ? 't':'f');
 
@@ -410,16 +427,16 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
     else{
       phaseAcc += phaseAccChange;
     }
-    uint32_t phaseOut = (((phaseAcc >> 24) - 128) >> (8-volume)) + 128;
+    uint32_t phaseOut = ((phaseAcc >> 24) - 128) + 128;
     if (tone == 0){ //SAWTOOTH
-      return phaseOut;
+      return phaseOut >> (8-volume);
     }
     else{ //SQUARE
       if (phaseOut < 128){
-        return 0;
+        return 128 >> (8-volume);
       }
       else{
-        return 255;
+        return 255 >> (8-volume);
       }
     }
   }
