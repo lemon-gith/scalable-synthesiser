@@ -86,10 +86,16 @@ void navigate(char direction){
         if(octave<8){
           octave++;
         }
+        else if (octave==0){
+          octave = 0;
+        }
       }
       else if(direction=='d'){
         if(octave>0){
           octave--;
+        }
+        else if(octave==0){
+          octave = 8;
         }
       }
     }
@@ -305,6 +311,7 @@ void updateDisplayTask(void * pvParameters){
     uint8_t localMenuState = sysState.menuState;
     bool localIsSelected = sysState.isSelected;
     const char* localToneNames = toneNames[sysState.knobValues[1]];
+    uint32_t localVolValue = sysState.knobValues[0]; 
     for(int i=0; i<sizeof(sysState.dotLocation); i++){
       localDotLoc[i] = sysState.dotLocation[i];
     }
@@ -326,16 +333,16 @@ void updateDisplayTask(void * pvParameters){
     u8g2.print(metOnState ? "OFF": "ON");
     //Playback
     u8g2.drawStr(62, 12, "Rec:");
-    u8g2.drawCircle(80, 10, 3);
-    u8g2.drawBox(88, 8, 5, 5);
-    u8g2.drawTriangle(100, 7, 100, 13, 103, 10);
+    u8g2.drawCircle(86, 10, 2);
+    u8g2.drawBox(97, 8, 5, 5);
+    u8g2.drawTriangle(110, 7, 110, 13, 114, 10);
 
     //Bottom Menu
     //Volume
     u8g2.drawStr(10, 20, "Vol");
     u8g2.drawFrame(1, 22, 28, 12);
     u8g2.setCursor(1+14-5, 29);
-    u8g2.print(localMenuState);
+    u8g2.print(localVolValue);
     u8g2.setCursor(16, 29);
     u8g2.print(localIsSelected ? 't':'f');
 
