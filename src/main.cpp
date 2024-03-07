@@ -58,7 +58,7 @@ std::bitset<12> readKnobs(){
 }
 
 char calcJoy(short x, short y, short p){ 
-  if(p==0){
+  if(p == 0){  // TODO: engage state machine
     return 'p';
   }
   else if(x < 300 &&  (y < 600 && y > 200)){
@@ -84,7 +84,7 @@ void navigate(char direction){
   
   uint8_t menuState = sysState.menuState;
   bool isSelected = sysState.isSelected;
-  bool metMenuState = sysState.metMenuState;
+  // bool metMenuState = sysState.metMenuState;
   bool metOnState = sysState.metOnState;
   int metValue = sysState.met;
   for(int i = 0; i < sizeof(sysState.dotLocation); i++){
@@ -92,73 +92,40 @@ void navigate(char direction){
   }
   uint8_t octave = sysState.octave;
   xSemaphoreGive(sysState.mutex);
-  if(direction=='p'){ //joystick press changes isSelected state
+
+  if(direction=='p') // joystick press changes isSelected state
     isSelected = !isSelected;
-    }
-  if(isSelected==false){ //if isSelected is false, it can move between the 3 menu items
-    if(menuState==0){
-      if(direction=='d'){
-        menuState = 1;
-        localDotLoc[0] = 58;
-        localDotLoc[1] = 12;
-      }
-    }
-    else if(menuState ==1){
-      if(direction =='u'){
-        menuState = 0;
-        localDotLoc[0] = 58;
-        localDotLoc[1] = 4;
-      }
-      else if(direction =='l'){
-        menuState = 2;
-        localDotLoc[0] = 2;
-        localDotLoc[1] = 12;
-      }
-    }
-    else if(menuState ==2){
-      if(direction == 'r'){
-        menuState = 1;
-        localDotLoc[0] = 58;
-        localDotLoc[1] = 12;
-      }
-    }
-  }
-  else{ //if isSelected is true (i.e. menu item is selected)
-    if(menuState==0){
-      if(!metMenuState){
-        if(direction == 'u'){
-          if(metValue==200){
-            metValue=0;
-          }
-          else{
-          metValue++;
-          }
+
+  if(isSelected){  // if isSelected is true (i.e. menu item is selected)
+    switch(menuState){
+      case 0: // metronome menu
+        switch(direction){
+          case 'u':
+            if(metValue == 250)
+              metValue = 12;
+            else
+              metValue++;
+            break;
+          case 'd':
+            if(metValue == 12)
+              metValue = 250;
+            else
+              metValue--;
+            break;
+          case 'l':
+            metOnState = false;
+            break;
+          case 'r':
+            metOnState = true;
+            break;
+          default:
+            break;
         }
-        else if(direction == 'd'){
-          if(metValue==0){
-            metValue=200;
-          }
-          else{
-            metValue--;
-          }
-        }
-        else if(direction == 'r'){
-          metMenuState=!metMenuState;
-        }
-      }
-      else if(metMenuState){
-        if(direction=='p'){
-          metOnState = !metOnState;
-        }
-        else if(direction=='l'){
-          metMenuState=!metMenuState;
-        }
-        
-        
-      }
-    }
-    else if(menuState==2){
-      if(direction=='u'){
+        break;
+      case 1:  // playback menu
+        break;  // TODO: implement REC playback menu
+      case 2:  // octave menu
+        if(direction=='u'){
         if(octave<8){
           octave++;
         }
@@ -174,13 +141,49 @@ void navigate(char direction){
           octave = 8;
         }
       }
+      default:
+        // undefined menu state
+        break;
+    }
+  }
+  else{  // if isSelected is false, it can move between the 3 menu items
+    switch (menuState){
+      case 0:  // metronome menu
+        if(direction=='d'){
+          menuState = 1;
+          localDotLoc[0] = 58;
+          localDotLoc[1] = 12;
+        }
+        break;
+      case 1:  // playback menu
+        if(direction =='u'){
+          menuState = 0;
+          localDotLoc[0] = 58;
+          localDotLoc[1] = 4;
+        }
+        else if(direction =='l'){
+          menuState = 2;
+          localDotLoc[0] = 2;
+          localDotLoc[1] = 12;
+        }
+        break;
+      case 2:  // octave menu
+        if(direction == 'r'){
+          menuState = 1;
+          localDotLoc[0] = 58;
+          localDotLoc[1] = 12;
+        }
+        break;
+      default:
+        // undefined menu state
+        break;
     }
   }
  
   xSemaphoreTake(sysState.mutex, portMAX_DELAY);
   sysState.octave = octave;
   sysState.metOnState = metOnState;
-  sysState.metMenuState = metMenuState;
+  // sysState.metMenuState = metMenuState; 
   sysState.met = metValue;
   sysState.menuState = menuState;
   sysState.isSelected = isSelected;
@@ -268,14 +271,17 @@ void updateKeysTask(void * pvParameters){
       //Knob pushes
       localKnobPushes[3-i] = !knobBools[i+8];
     }
+
     //see joystick push
     std::bitset<4> rowVals = readRow(5);
     short joy[3];
+
     //Store Joystick Values
-    joy[0] = analogRead(JOYX_PIN);
+    joy[0] = analogRead(JOYX_PIN);  // maybe average a few readings?
     joy[1] = analogRead(JOYY_PIN);
     joy[2] = rowVals[2];
     navigate(calcJoy(joy[0], joy[1], joy[2]));
+
     //Store to sysState
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     // Store key string globally
@@ -302,78 +308,99 @@ void updateDisplayTask(void * pvParameters){
   const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
-    vTaskDelayUntil( &xLastWakeTime, xFrequency );
-    //DISPLAY UPDATE
-    u8g2.clearBuffer();         // clear the internal memory
-    u8g2.setFont(u8g2_font_u8glib_4_tf); // choose a suitable font
-    //Display last sent/received CAN message
-    u8g2.drawFrame(0, -2, 56, 8);
-    //Display key names
-    char localKeyStrings[13];
-    localKeyStrings[12] = '\0'; //Termination
+    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    // DISPLAY UPDATE
+    u8g2.clearBuffer();  // clear internal write memory
+    u8g2.setFont(u8g2_font_u8glib_4_tf);  // choose a suitable font
+    // Display last sent/received CAN message
     
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY); //Take all the necessary variables
-    for (int i = 0; i<12; i++){localKeyStrings[i] = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);}
+    // Take all the necessary variables
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY); 
+    // holds local keypress info
+    char localKeyStrings[13] = {0};
+    localKeyStrings[12] = '\0';  // 12 keys + null terminator
+    for (int i = 0; i < 12; i++){
+      localKeyStrings[i] = 
+        __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
+    }
     uint8_t localDotLoc[2] = {0};
     uint8_t localOctave = sysState.octave; 
     uint8_t localSendState = sysState.TX_Message[0];
     uint8_t localMetValue = sysState.met;
     bool metOnState = sysState.metOnState;
     uint8_t localMenuState = sysState.menuState;
-    bool localIsSelected = sysState.isSelected;
+    char cursorSelectState = sysState.isSelected ? '>' : '-';
     const char* localToneNames = toneNames[sysState.knobValues[1]];
     uint32_t localVolValue = sysState.knobValues[0]; 
-    for(int i=0; i<sizeof(sysState.dotLocation); i++){
+    for(int i = 0; i < sizeof(sysState.dotLocation); i++){
       localDotLoc[i] = sysState.dotLocation[i];
     }
     xSemaphoreGive(sysState.mutex);
-    u8g2.drawStr(2,4,localKeyStrings);
-    u8g2.drawStr(localDotLoc[0], localDotLoc[1], "-");
-    //Octave
+
+    // TODO: switch menu frames to make this fit*
+    // then modify pressed key drawing to all be evenly spaced
+    // 61 - 13 (spaces) = 48, 48/12 = 4, so 4 pixels for each key
+    // *switch Oct and Met, Rec can be shifted right to match Oct
+    // u8g2.drawFrame(0, -2, 61, 8);
+    u8g2.drawFrame(0, -2, 56, 8);
+    //Display key names
+    u8g2.drawStr(2, 4, localKeyStrings);
+
+    // Cursor Shape
+    u8g2.setCursor(localDotLoc[0], localDotLoc[1]);
+    u8g2.print(cursorSelectState);
+
+    // Octave
     u8g2.drawStr(6, 12, "OCT:");
     u8g2.setCursor(22, 12);
     u8g2.print(localOctave);
     u8g2.setCursor(30,12);
     u8g2.print(localSendState);
-    //Metronome
-    u8g2.drawStr(62,4, "Met:");
+
+    // Metronome
+    u8g2.drawStr(62,4, "MET:");
     u8g2.setCursor(79, 4);
     u8g2.print(localMetValue);
     u8g2.drawStr(92, 4, "BPM");
     u8g2.setCursor(114, 4);
-    u8g2.print(metOnState ? "OFF": "ON");
-    //Playback
-    u8g2.drawStr(62, 12, "Rec:");
+    u8g2.print(metOnState ? "ON": "OFF");
+
+    // Playback
+    u8g2.drawStr(62, 12, "REC:");
     u8g2.drawCircle(86, 10, 2);
     u8g2.drawBox(97, 8, 5, 5);
     u8g2.drawTriangle(110, 7, 110, 13, 114, 10);
 
-    //Bottom Menu
-    //Volume
+    // - - - Knob Stuff - - -
+
+    // Volume
     u8g2.drawStr(10, 20, "Vol");
     u8g2.drawFrame(1, 22, 28, 12);
-    u8g2.setCursor(1+14-5, 29);
+    u8g2.setCursor(1+18-5, 29);
     u8g2.print(localVolValue);
-    u8g2.setCursor(16, 29);
-    u8g2.print(localIsSelected ? 't':'f');
+    // u8g2.setCursor(16, 29);
 
-    //Tone
+    // Tone
     u8g2.drawStr(40, 20, "Tone");
     u8g2.drawFrame(33, 22, 28, 12);
     u8g2.drawStr(33+14-5, 29, localToneNames);
-    //Setting
+
+    // Setting
     u8g2.drawStr(66, 20, "Setting");
     u8g2.drawFrame(65, 22, 28, 12);
     u8g2.drawStr(65+14-5, 29, "Vib");
-    //Echo
+
+    // Echo
     u8g2.drawStr(104, 20, "Echo");
     u8g2.drawFrame(97, 22, 28, 12);
     u8g2.drawStr(97+14-5, 29, "Rev");
+
     //TODO: Add a centering function framex+(dist-2)-(floor(word/2))
     //      Word should b 3*(char len+1) - 1  
-    u8g2.sendBuffer();          // transfer internal memory to the display
-    //Toggle LED
-    digitalToggle(LED_BUILTIN); //Toggle LED for CW requirement
+    u8g2.sendBuffer();  // transfer internal memory to the display
+    
+    // Toggle LED
+    digitalToggle(LED_BUILTIN);  //Toggle LED for CW requirement
   }
 }
 
@@ -416,22 +443,24 @@ void CAN_TX_Task (void * pvParameters) {
 
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
   // FUNCTION WAVES
-  if((tone == 0)||(tone == 1)|(tone == 3)){ //SAWTOOTH OR SQUARE OR TRIANGLE
+  if((tone < 4) && (tone != 2)){  // SINE not implemented yet
     static uint32_t phaseAcc = 0;
     uint32_t phaseAccChange = 0;
-    uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
+    uint32_t phaseInc = (oct < 4) ? 
+      (stepSizes[note] >> (4 - oct)) : 
+      (stepSizes[note] << (oct - 4));
     phaseAccChange += phaseInc;
-    if (phaseAccChange==0){
+    if (phaseAccChange == 0){
       phaseAcc = 0;
     }
     else{
       phaseAcc += phaseAccChange;
     }
     uint32_t phaseOut = ((phaseAcc >> 24) - 128) + 128;
-    if (tone == 0){ //SAWTOOTH
+    if (tone == 0){  //SAWTOOTH
       return phaseOut >> (8-volume);
     }
-    else if (tone == 1){ //SQUARE
+    else if (tone == 1){  //SQUARE
       if (phaseOut < 128){
         return 128 >> (8-volume);
       }
@@ -439,13 +468,16 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
         return 256 >> (8-volume);
       }
     }
-    else if (tone == 3){ //TRIANGLE
+    else if (tone == 3){  //TRIANGLE
       if (phaseOut > 128){
         return ((256 - phaseOut)) >> (8-volume);
       }
       else{
         return ((2*phaseOut)) >> (8-volume);
       }
+    }
+    else{
+      return 128;  // to avoid undefined return value
     }
   }
   else{
@@ -460,14 +492,21 @@ void sampleISR() {
     uint32_t localTone = __atomic_load_n(&sysState.knobValues[1], __ATOMIC_RELAXED);
     //Play local keys
     for(int i=0; i<12; i++){
-      char localCurrentKeystring = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
-      if(localCurrentKeystring != '-'){Vout += playNote(sysState.octave, i, localVolume, localTone);}
+      char localCurrentKeystring = 
+        __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
+      if(localCurrentKeystring != '-'){
+        Vout += playNote(sysState.octave, i, localVolume, localTone);
+      }
     }
     // Play received keys
     uint8_t localRX_Message[8];
-    for (int i=0; i<8; i++){localRX_Message[i] = __atomic_load_n(&sysState.RX_Message[i], __ATOMIC_RELAXED);}
+    for (int i=0; i<8; i++){
+      localRX_Message[i] = 
+        __atomic_load_n(&sysState.RX_Message[i], __ATOMIC_RELAXED);
+    }
     if (localRX_Message[0] == 'P'){
-      Vout += playNote(localRX_Message[1], localRX_Message[2], localVolume, localTone);
+      Vout += playNote(localRX_Message[1], localRX_Message[2], 
+                       localVolume, localTone);
     }
     analogWrite(OUTR_PIN, Vout);
   }
