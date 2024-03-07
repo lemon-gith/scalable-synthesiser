@@ -391,7 +391,7 @@ void CAN_TX_Task (void * pvParameters) {
 // Given an octave, note index, volume, and tone, plays the note
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
   // FUNCTION WAVES
-  if((tone == 0)|(tone == 1)){ //SAWTOOTH OR SQUARE
+  if((tone == 0)|(tone == 1)|(tone == 3)){ //SAWTOOTH OR SQUARE OR TRIANGLE
     static uint32_t phaseAcc = 0;
     uint32_t phaseAccChange = 0;
     uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
@@ -406,12 +406,20 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
     if (tone == 0){ //SAWTOOTH
       return phaseOut >> (8-volume);
     }
-    else{ //SQUARE
+    else if (tone == 1){ //SQUARE
       if (phaseOut < 128){
         return 128 >> (8-volume);
       }
       else{
         return 255 >> (8-volume);
+      }
+    }
+    else if (tone == 3){ //TRIANGLE
+      if (phaseOut > 128){
+        return (2*(255 - phaseOut)) >> (8-volume);
+      }
+      else{
+        return (2*phaseOut) >> (8-volume);
       }
     }
   }
