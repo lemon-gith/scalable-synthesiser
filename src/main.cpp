@@ -354,7 +354,7 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
     }
     else{ //SQUARE
       if (phaseOut < 128){
-        return 0;
+        return 128;
       }
       else{
         return 255;
@@ -443,7 +443,7 @@ void setup() {
   //Initialise CAN
   // NOTE: When the module is a sender, loopback must be set to true!
   //       This is because without an ACK, the module will try to transmit forever.
-  CAN_Init(true);     //Set to true for loopback mode
+  CAN_Init(false);     //Set to true for loopback mode
   setCANFilter(0xd123,0x7ff);    //ID, mask
   CAN_RegisterRX_ISR(CAN_RX_ISR);
   CAN_RegisterTX_ISR(CAN_TX_ISR);
