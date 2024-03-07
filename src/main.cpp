@@ -412,16 +412,16 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
     else{
       phaseAcc += phaseAccChange;
     }
-    uint32_t phaseOut = (((phaseAcc >> 24) - 128) >> (8-volume)) + 128;
+    uint32_t phaseOut = ((phaseAcc >> 24) - 128) + 128;
     if (tone == 0){ //SAWTOOTH
-      return phaseOut;
+      return phaseOut >> (8-volume);
     }
     else{ //SQUARE
       if (phaseOut < 128){
-        return 0;
+        return 128 >> (8-volume);
       }
       else{
-        return 255;
+        return 255 >> (8-volume);
       }
     }
   }
