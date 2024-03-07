@@ -1,64 +1,6 @@
-#include <Arduino.h>
-#include <U8g2lib.h>
-#include <STM32FreeRTOS.h>
-#include <ES_CAN.h>
-#include <bitset>
+#include "main.h"
 
-//Constants
-  const uint32_t interval = 100; //Display update interval
-  const char keys[12] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'};
-  const uint32_t stepSizes [] = {51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 72232452, 76527617, 81078186, 85899346, 91007187, 96418756};
-  const char* toneNames [] = {"saw", "sqr", "sin", "tri"};
-  const uint32_t knobMaxes[4] = {8,(sizeof(toneNames)/sizeof(toneNames[0]))-1,5,4};
 
-//System state variable arrays
-struct {
-  volatile char keyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
-  volatile uint32_t knobValues[4] = {4,0,knobMaxes[2],knobMaxes[3]}; // K0 K1 K2 K3
-  volatile bool knobPushes[4] = {0,0,0,0}; //VOL TONE SETTING ECHO
-  volatile short joy[3]= {0,0,0};
-  volatile uint8_t octave = 4;
-  volatile uint8_t TX_Message[8] = {0};
-  volatile uint8_t RX_Message[8] = {0};
-  volatile bool isSender = false;
-  volatile uint8_t met = 120;
-  SemaphoreHandle_t mutex;
-} sysState;
-QueueHandle_t msgInQ;
-QueueHandle_t msgOutQ;
-SemaphoreHandle_t CAN_TX_Semaphore;
-//Pin definitions
-  //Row select and enable
-  const int RA0_PIN = D3;
-  const int RA1_PIN = D6;
-  const int RA2_PIN = D12;
-  const int REN_PIN = A5;
-
-  //Matrix input and output
-  const int C0_PIN = A2;
-  const int C1_PIN = D9;
-  const int C2_PIN = A6;
-  const int C3_PIN = D1;
-  const int OUT_PIN = D11;
-
-  //Audio analogue out
-  const int OUTL_PIN = A4;
-  const int OUTR_PIN = A3;
-
-  //Joystick analogue in
-  const int JOYY_PIN = A0;
-  const int JOYX_PIN = A1;
-
-  //Output multiplexer bits
-  const int DEN_BIT = 3;
-  const int DRST_BIT = 4;
-  const int HKOW_BIT = 5;
-  const int HKOE_BIT = 6;
-
-//Display driver object
-U8G2_SSD1305_128X32_ADAFRUIT_F_HW_I2C u8g2(U8G2_R0);
-
-//Big Endian
 //Big Endian
 std::bitset<4> readCols(){
   std::bitset<4> result;
@@ -67,6 +9,103 @@ std::bitset<4> readCols(){
   result[1] = digitalRead(C1_PIN);
   result[0] = digitalRead(C0_PIN);
   return result;
+}
+
+
+void navigate(char direction){
+  uint8_t localDotLoc[2] = {0};
+  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  
+  uint8_t menuState = sysState.menuState;
+  bool isSelected = sysState.isSelected;
+  bool metMenuState = sysState.metMenuState;
+  bool metOnState = sysState.metOnState;
+  int metValue = sysState.met;
+  for(int i=0; i<sizeof(sysState.dotLocation); i++){
+    localDotLoc[i] = sysState.dotLocation[i];
+  }
+  uint8_t octave = sysState.octave;
+  xSemaphoreGive(sysState.mutex);
+  if(direction=='p'){ //joystick press changes isSelected state
+    isSelected = !isSelected;
+    }
+  if(isSelected==false){ //if isSelected is false, it can move between the 3 menu items
+    if(menuState==0){
+      if(direction=='d'){
+        menuState = 1;
+        localDotLoc[0] = 58;
+        localDotLoc[1] = 12;
+      }
+    }
+    else if(menuState ==1){
+      if(direction =='u'){
+        menuState = 0;
+        localDotLoc[0] = 58;
+        localDotLoc[1] = 4;
+      }
+      else if(direction =='l'){
+        menuState = 2;
+        localDotLoc[0] = 2;
+        localDotLoc[1] = 12;
+      }
+    }
+    else if(menuState ==2){
+      if(direction == 'r'){
+        menuState = 1;
+        localDotLoc[0] = 58;
+        localDotLoc[1] = 12;
+      }
+    }
+  }
+  else{ //if isSelected is true (i.e. menu item is selected)
+    if(menuState==0){
+      if(!metMenuState){
+        if(direction == 'u'){
+          metValue++;
+        }
+        else if(direction == 'd'){
+          metValue--;
+        }
+        else if(direction == 'r'){
+          metMenuState=!metMenuState;
+        }
+      }
+      else if(metMenuState){
+        if(direction=='p'){
+          metOnState = !metOnState;
+        }
+        else if(direction=='l'){
+          metMenuState=!metMenuState;
+        }
+        
+        
+      }
+    }
+    else if(menuState==2){
+      if(direction=='u'){
+        if(octave<8){
+          octave++;
+        }
+      }
+      else if(direction=='d'){
+        if(octave>0){
+          octave--;
+        }
+      }
+    }
+  }
+ 
+  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  sysState.octave = octave;
+  sysState.metOnState = metOnState;
+  sysState.metMenuState = metMenuState;
+  sysState.met = metValue;
+  sysState.menuState = menuState;
+  sysState.isSelected = isSelected;
+  for (int i=0; i<sizeof(localDotLoc); i++){
+    sysState.dotLocation[i] = localDotLoc[i];
+  }
+  xSemaphoreGive(sysState.mutex);
 }
 
 void setRow(uint8_t row){
@@ -213,6 +252,12 @@ void updateKeysTask(void * pvParameters) {
     }
     //see joystick push
     std::bitset<4> rowVals = readRow(5);
+    short joy[3];
+    //Store Joystick Values
+    joy[0] = analogRead(JOYX_PIN);
+    joy[1] = analogRead(JOYY_PIN);
+    joy[2] = rowVals[2];
+    navigate(calcJoy(joy[0], joy[1], joy[2]));
     //Store to sysState
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     // Store key string globally
@@ -224,15 +269,12 @@ void updateKeysTask(void * pvParameters) {
       int tmp = sysState.knobValues[i]+localKnobDiffs[i];
       __atomic_store_n(&sysState.knobValues[i], tmp, __ATOMIC_RELAXED);
     }
-    __atomic_store_n(&sysState.octave, sysState.knobValues[2], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
+    //__atomic_store_n(&sysState.octave, sysState.knobValues[2], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
     // Store knob pushes globally
     for (int i=0; i<4; i++){
       __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
     }
-    //Store Joystick Values
-    sysState.joy[0] = analogRead(JOYX_PIN);
-    sysState.joy[1] = analogRead(JOYY_PIN);
-    sysState.joy[2] = rowVals[2];
+    
     xSemaphoreGive(sysState.mutex);
     //
   }
@@ -252,31 +294,39 @@ void updateDisplayTask(void * pvParameters){
     //Display key names
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY); //Take all the necessary variables
     for (int i = 0; i<12; i++){localKeyStrings[i] = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);}
+    uint8_t localDotLoc[2] = {0};
+    uint8_t localOctave = sysState.octave; 
+    uint8_t localSendState = sysState.TX_Message[0];
+    uint8_t localMetValue = sysState.met;
+    bool metOnState = sysState.metOnState;
+    uint8_t localMenuState = sysState.menuState;
+    bool localIsSelected = sysState.isSelected;
+    const char* localToneNames = toneNames[sysState.knobValues[1]];
+    for(int i=0; i<sizeof(sysState.dotLocation); i++){
+      localDotLoc[i] = sysState.dotLocation[i];
+    }
     xSemaphoreGive(sysState.mutex);
     u8g2.drawStr(2,4,localKeyStrings);
+    u8g2.drawStr(localDotLoc[0], localDotLoc[1], "-");
     //Octave
-    u8g2.drawStr(2, 12, "OCT:");
-    u8g2.setCursor(20, 12);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.octave);
+    u8g2.drawStr(6, 12, "OCT:");
+    u8g2.setCursor(22, 12);
+    u8g2.print(localOctave);
     u8g2.setCursor(30,12);
-    u8g2.print(sysState.TX_Message[0]);
-    xSemaphoreGive(sysState.mutex);
+    u8g2.print(localSendState);
     //Metronome
-    u8g2.drawStr(60,4, "Met");
-    u8g2.drawStr(75,4,"<");
+    u8g2.drawStr(62,4, "Met:");
     u8g2.setCursor(79, 4);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.met);
-    xSemaphoreGive(sysState.mutex);
+    u8g2.print(localMetValue);
     u8g2.drawStr(92, 4, "BPM");
-    u8g2.drawStr(110,4,">");
-    u8g2.drawStr(114,4,"ON");
+    u8g2.setCursor(114, 4);
+    u8g2.print(metOnState ? "OFF": "ON");
     //Playback
-    u8g2.drawStr(60, 12, "Pb");
-    u8g2.drawCircle(78, 10, 3);
+    u8g2.drawStr(62, 12, "Rec:");
+    u8g2.drawCircle(80, 10, 3);
     u8g2.drawBox(88, 8, 5, 5);
     u8g2.drawTriangle(100, 7, 100, 13, 103, 10);
 
@@ -285,17 +335,14 @@ void updateDisplayTask(void * pvParameters){
     u8g2.drawStr(10, 20, "Vol");
     u8g2.drawFrame(1, 22, 28, 12);
     u8g2.setCursor(1+14-5, 29);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.knobValues[0]);
+    u8g2.print(localMenuState);
     u8g2.setCursor(16, 29);
-    u8g2.print(calcJoy(sysState.joy[0], sysState.joy[1], sysState.joy[2]));
-    xSemaphoreGive(sysState.mutex);
+    u8g2.print(localIsSelected ? 't':'f');
+
     //Tone
     u8g2.drawStr(40, 20, "Tone");
     u8g2.drawFrame(33, 22, 28, 12);
-    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.drawStr(33+14-5, 29, toneNames[sysState.knobValues[1]]);
-    xSemaphoreGive(sysState.mutex);
+    u8g2.drawStr(33+14-5, 29, localToneNames);
     //Setting
     u8g2.drawStr(66, 20, "Setting");
     u8g2.drawFrame(65, 22, 28, 12);
