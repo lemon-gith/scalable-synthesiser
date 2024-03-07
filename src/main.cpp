@@ -61,10 +61,20 @@ void navigate(char direction){
     if(menuState==0){
       if(!metMenuState){
         if(direction == 'u'){
+          if(metValue==200){
+            metValue=0;
+          }
+          else{
           metValue++;
+          }
         }
         else if(direction == 'd'){
-          metValue--;
+          if(metValue==0){
+            metValue=200;
+          }
+          else{
+            metValue--;
+          }
         }
         else if(direction == 'r'){
           metMenuState=!metMenuState;
@@ -86,7 +96,7 @@ void navigate(char direction){
         if(octave<8){
           octave++;
         }
-        else if (octave==0){
+        else if (octave==8){
           octave = 0;
         }
       }
