@@ -421,15 +421,15 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
         return 128 >> (8-volume);
       }
       else{
-        return 255 >> (8-volume);
+        return 256 >> (8-volume);
       }
     }
     else if (tone == 3){ //TRIANGLE
       if (phaseOut > 128){
-        return (2*(255 - phaseOut)) >> (8-volume);
+        return ((256 - phaseOut)) >> (8-volume);
       }
       else{
-        return (2*phaseOut) >> (8-volume);
+        return ((2*phaseOut)) >> (8-volume);
       }
     }
   }
