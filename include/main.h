@@ -88,34 +88,62 @@ enum PinDefinitions{
 //Display driver object
 U8G2_SSD1305_128X32_ADAFRUIT_F_HW_I2C u8g2(U8G2_R0);
 
-std::bitset<4> readCols();
+// - - - - - - - - - - - - - - READING INPUTS - - - - - - - - - - - - - - 
 
+// reads state of columns: detects if a key in that column is depressed
+std::bitset<4> readCols(void);
+
+// sets the row to be read
 void setRow(uint8_t row);
 
+// higher order function to set a row and then read the key presses for that row
 std::bitset<4> readRow(uint8_t row);
 
-std::bitset<32> readKeys();
+// an even higher order function to read all key presses
+std::bitset<32> readKeys(void);
 
-std::bitset<12> readKnobs();
+// reads the state of the knobs
+std::bitset<12> readKnobs(void);
 
+// calculates the direction of the joystick (goes from 0 to 1024)
 char calcJoy(short x, short y, short p);
 
+// navigates the cursor through the menu based on the joystick's direction
+void navigate(char direction);
+
+// - - - - - - - - - - - - - - TIMED TASKS - - - - - - - - - - - - - - 
+
+// reads keys and updates all relevant system components
+// including informing any connected devices
 void updateKeysTask(void * pvParameters);
 
+// refreshes display with updated information
 void updateDisplayTask(void * pvParameters);
 
-void decodeMessageTask(void * pvParameters);
+// - - - - - - - - - - - - - - - - - CAN TASKS - - - - - - - - - - - - - - - - -
 
-void CAN_TX_Task (void * pvParameters);
-
-int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone);
-
-void sampleISR();
-
+// ISR to store incoming CAN RX messages
 void CAN_RX_ISR (void);
 
+// decodes queued incoming CAN messages and updates system state
+void decodeMessageTask(void * pvParameters);
+
+// ISR to give the semaphore once mailbox available
 void CAN_TX_ISR (void);
 
+// Sends queued messages to CAN bus
+void CAN_TX_Task (void * pvParameters);
+
+// - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
+
+// Plays the requested note, based on:
+// the octave, note index, volume, and tone type
+int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone);
+
+// Interrupt Service Routine for sound output
+void sampleISR(void);
+
+// Function to set outputs using key matrix for display initialisation
 void setOutMuxBit(const uint8_t bitIdx, const bool value);
 
 // setup and loop don't need to go here
