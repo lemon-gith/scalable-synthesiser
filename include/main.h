@@ -1,3 +1,6 @@
+#ifndef MAIN_H
+#define MAIN_H
+
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <STM32FreeRTOS.h>
@@ -148,3 +151,4 @@ void setOutMuxBit(const uint8_t bitIdx, const bool value);
 
 // setup and loop don't need to go here
 
+#endif
