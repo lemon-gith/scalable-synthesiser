@@ -26,6 +26,7 @@ struct {
   volatile uint8_t met = 120;
   volatile bool metMenuState = false; //false is met slider, true is ON/OFF
   volatile bool metOnState = false;
+  volatile uint8_t dotLocation[2] = {58, 4};
   SemaphoreHandle_t mutex;
 } sysState;
 QueueHandle_t msgInQ;
@@ -73,13 +74,19 @@ std::bitset<4> readCols(){
   return result;
 }
 
+
 void navigate(char direction){
+  uint8_t localDotLoc[2] = {0};
   xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  
   uint8_t menuState = sysState.menuState;
   bool isSelected = sysState.isSelected;
   bool metMenuState = sysState.metMenuState;
   bool metOnState = sysState.metOnState;
   int metValue = sysState.met;
+  for(int i=0; i<sizeof(sysState.dotLocation); i++){
+    localDotLoc[i] = sysState.dotLocation[i];
+  }
   uint8_t octave = sysState.octave;
   xSemaphoreGive(sysState.mutex);
   if(direction=='p'){ //joystick press changes isSelected state
@@ -89,19 +96,27 @@ void navigate(char direction){
     if(menuState==0){
       if(direction=='d'){
         menuState = 1;
+        localDotLoc[0] = 58;
+        localDotLoc[1] = 12;
       }
     }
     else if(menuState ==1){
       if(direction =='u'){
         menuState = 0;
+        localDotLoc[0] = 58;
+        localDotLoc[1] = 4;
       }
       else if(direction =='l'){
         menuState = 2;
+        localDotLoc[0] = 2;
+        localDotLoc[1] = 12;
       }
     }
     else if(menuState ==2){
       if(direction == 'r'){
         menuState = 1;
+        localDotLoc[0] = 58;
+        localDotLoc[1] = 12;
       }
     }
   }
@@ -150,6 +165,9 @@ void navigate(char direction){
   sysState.met = metValue;
   sysState.menuState = menuState;
   sysState.isSelected = isSelected;
+  for (int i=0; i<sizeof(localDotLoc); i++){
+    sysState.dotLocation[i] = localDotLoc[i];
+  }
   xSemaphoreGive(sysState.mutex);
 }
 
@@ -339,8 +357,10 @@ void updateDisplayTask(void * pvParameters){
     //Display key names
     char localKeyStrings[13];
     localKeyStrings[12] = '\0'; //Termination
+    
     xSemaphoreTake(sysState.mutex, portMAX_DELAY); //Take all the necessary variables
     for (int i = 0; i<12; i++){localKeyStrings[i] = __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);}
+    uint8_t localDotLoc[2] = {0};
     uint8_t localOctave = sysState.octave; 
     uint8_t localSendState = sysState.TX_Message[0];
     uint8_t localMetValue = sysState.met;
@@ -348,24 +368,28 @@ void updateDisplayTask(void * pvParameters){
     uint8_t localMenuState = sysState.menuState;
     bool localIsSelected = sysState.isSelected;
     const char* localToneNames = toneNames[sysState.knobValues[1]];
+    for(int i=0; i<sizeof(sysState.dotLocation); i++){
+      localDotLoc[i] = sysState.dotLocation[i];
+    }
     xSemaphoreGive(sysState.mutex);
     u8g2.drawStr(2,4,localKeyStrings);
+    u8g2.drawStr(localDotLoc[0], localDotLoc[1], "-");
     //Octave
-    u8g2.drawStr(2, 12, "OCT:");
-    u8g2.setCursor(20, 12);
+    u8g2.drawStr(6, 12, "OCT:");
+    u8g2.setCursor(22, 12);
     u8g2.print(localOctave);
     u8g2.setCursor(30,12);
     u8g2.print(localSendState);
     //Metronome
-    u8g2.drawStr(60,4, "Met:");
+    u8g2.drawStr(62,4, "Met:");
     u8g2.setCursor(79, 4);
     u8g2.print(localMetValue);
     u8g2.drawStr(92, 4, "BPM");
     u8g2.setCursor(114, 4);
     u8g2.print(metOnState ? "OFF": "ON");
     //Playback
-    u8g2.drawStr(60, 12, "Pb");
-    u8g2.drawCircle(78, 10, 3);
+    u8g2.drawStr(62, 12, "Rec:");
+    u8g2.drawCircle(80, 10, 3);
     u8g2.drawBox(88, 8, 5, 5);
     u8g2.drawTriangle(100, 7, 100, 13, 103, 10);
 
