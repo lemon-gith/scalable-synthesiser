@@ -1,8 +1,10 @@
 #include "main.h"
 
 
-//Big Endian
+// - - - - - - - - - - - - - - READING INPUTS - - - - - - - - - - - - - - 
+
 std::bitset<4> readCols(){
+  // Big Endian
   std::bitset<4> result;
   result[3] = digitalRead(C3_PIN);
   result[2] = digitalRead(C2_PIN);
@@ -11,6 +13,70 @@ std::bitset<4> readCols(){
   return result;
 }
 
+void setRow(uint8_t row){
+  digitalWrite(REN_PIN, LOW);
+  digitalWrite(RA2_PIN, row & 0x04 ? HIGH : LOW);
+  digitalWrite(RA1_PIN, row & 0x02 ? HIGH : LOW);
+  digitalWrite(RA0_PIN, row & 0x01 ? HIGH : LOW);
+  digitalWrite(REN_PIN, HIGH);
+}
+
+std::bitset<4> readRow(uint8_t row){
+  setRow(row);
+  delayMicroseconds(3);
+  return readCols();
+}
+
+std::bitset<32> readKeys() {
+  std::bitset<32> keysDown;
+  for (int i = 0; i < 3; i++) {
+      std::bitset<4> rowVals = readRow(i);
+      for (int j = 0; j < 4; j++) {
+          keysDown[(i*4)+j] = rowVals[j];
+      }
+  }
+  return keysDown;
+}
+
+// Output in zero-indexed array order {3A 3B 2A 2B 1A 1B 0A 0B 3S 2S 1S 0S}
+std::bitset<12> readKnobs(){
+  std::bitset<12> knobVals;  
+  for (int i = 3; i < 7; i++){
+    std::bitset<4> rowVals = readRow(i);
+    if ((3<=i)&&(i<5)){ //A&B vals
+      for (int j = 0; j < 4; j++) {
+        knobVals[(i-3)*4+j] = rowVals[j];
+      }
+    }
+    else{ //S vals
+      for (int j = 0; j < 2; j++){
+        knobVals[8+((i-5)*2)+j] = rowVals[1-j];
+      }
+    }
+  }
+  return knobVals;
+}
+
+char calcJoy(short x, short y, short p){ 
+  if(p==0){
+    return 'p';
+  }
+  else if(x < 300 &&  (y < 600 && y > 200)){
+    return 'r';
+  }
+  else if (x > 700 && (y < 600 && y > 200)){
+    return 'l';
+  }
+  else if ((x < 600 && x > 200) && y < 200){
+    return 'u';
+  }
+  else if ((x < 600 && x > 200) && y > 700){
+    return 'd';
+  }
+  else{
+    return 's';
+  }
+}
 
 void navigate(char direction){
   uint8_t localDotLoc[2] = {0};
@@ -21,7 +87,7 @@ void navigate(char direction){
   bool metMenuState = sysState.metMenuState;
   bool metOnState = sysState.metOnState;
   int metValue = sysState.met;
-  for(int i=0; i<sizeof(sysState.dotLocation); i++){
+  for(int i = 0; i < sizeof(sysState.dotLocation); i++){
     localDotLoc[i] = sysState.dotLocation[i];
   }
   uint8_t octave = sysState.octave;
@@ -124,73 +190,9 @@ void navigate(char direction){
   xSemaphoreGive(sysState.mutex);
 }
 
-void setRow(uint8_t row){
-  digitalWrite(REN_PIN, LOW);
-  digitalWrite(RA2_PIN, row & 0x04 ? HIGH : LOW);
-  digitalWrite(RA1_PIN, row & 0x02 ? HIGH : LOW);
-  digitalWrite(RA0_PIN, row & 0x01 ? HIGH : LOW);
-  digitalWrite(REN_PIN, HIGH);
-}
+// - - - - - - - - - - - - - - TIMED TASKS - - - - - - - - - - - - - - 
 
-std::bitset<4> readRow(uint8_t row){
-  setRow(row);
-  delayMicroseconds(3);
-  return readCols();
-}
-
-std::bitset<32> readKeys() {
-  std::bitset<32> keysDown;
-  for (int i = 0; i < 3; i++) {
-      std::bitset<4> rowVals = readRow(i);
-      for (int j = 0; j < 4; j++) {
-          keysDown[(i*4)+j] = rowVals[j];
-      }
-  }
-  return keysDown;
-}
-
-// Output in zero-indexed array order {3A 3B 2A 2B 1A 1B 0A 0B 3S 2S 1S 0S}
-std::bitset<12> readKnobs(){
-  std::bitset<12> knobVals;  
-  for (int i = 3; i < 7; i++){
-    std::bitset<4> rowVals = readRow(i);
-    if ((3<=i)&(i<5)){ //A&B vals
-      for (int j = 0; j < 4; j++) {
-        knobVals[(i-3)*4+j] = rowVals[j];
-      }
-    }
-    else{ //S vals
-      for (int j = 0; j < 2; j++){
-        knobVals[8+((i-5)*2)+j] = rowVals[1-j];
-      }
-    }
-  }
-  return knobVals;
-}
-
-char calcJoy(short x, short y, short p){ //calculates the direction of the joystick (goes from 0 to 1024)
-  if(p==0){
-    return 'p';
-  }
-  else if(x<300 && (y<600&&y>200)){
-    return 'r';
-  }
-  else if (x>700&&(y<600&&y>200)){
-    return 'l';
-  }
-  else if ((x<600&&x>200)&&y<200){
-    return 'u';
-  }
-  else if ((x<600&&x>200)&&y>700){
-    return 'd';
-  }
-  else{
-    return 's';
-  }
-}
-
-// TIMED TASKS
-void updateKeysTask(void * pvParameters) {
+void updateKeysTask(void * pvParameters){
   const TickType_t xFrequency = 20/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
@@ -247,15 +249,15 @@ void updateKeysTask(void * pvParameters) {
       xSemaphoreTake(sysState.mutex, portMAX_DELAY);
       for (int i=0; i<4; i++){localKnobValues[i] = __atomic_load_n(&sysState.knobValues[i], __ATOMIC_RELAXED);}
       xSemaphoreGive(sysState.mutex);
-      if(((prevBool == 0b00)and(currBool == 0b01))or((prevBool == 0b11)and(currBool == 0b10))){
+      if(((prevBool == 0b00) && (currBool == 0b01)) || ((prevBool == 0b11) && (currBool == 0b10))){
         localKnobDiffs[3-i] = (localKnobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
         lastLegalDiff[3-i] = (localKnobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
       }
-      else if(((prevBool == 0b01)and(currBool == 0b00))or((prevBool == 0b10)and(currBool == 0b11))){
+      else if(((prevBool == 0b01) && (currBool == 0b00)) || ((prevBool == 0b10) && (currBool == 0b11))){
         localKnobDiffs[3-i] = (localKnobValues[3-i] > 0) ? -1 : 0;
         lastLegalDiff[3-i] = (localKnobValues[3-i] > 0) ? -1 : 0;
       }
-      else if(((prevBool == 0b00)and(currBool == 0b11))or((prevBool == 0b11)and(currBool == 0b00))or((prevBool == 0b01)and(currBool == 0b10))or((prevBool == 0b10)and(currBool == 0b01))){
+      else if(((prevBool == 0b00) && (currBool == 0b11)) || ((prevBool == 0b11) && (currBool == 0b00)) || ((prevBool == 0b01) && (currBool == 0b10)) || ((prevBool == 0b10) && (currBool == 0b01))){
         //other legal transition
         localKnobDiffs[3-i] = 0;
       }
@@ -296,7 +298,6 @@ void updateKeysTask(void * pvParameters) {
   }
 }
 
-// Refreshes display
 void updateDisplayTask(void * pvParameters){
   const TickType_t xFrequency = 100/portTICK_PERIOD_MS;
   TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -376,32 +377,46 @@ void updateDisplayTask(void * pvParameters){
   }
 }
 
-// Decodes messages
+// - - - - - - - - - - - - - - - - - CAN TASKS - - - - - - - - - - - - - - - - -
+
 void decodeMessageTask(void * pvParameters){
   uint8_t localRX_Message[8] = {0};
   while(1){
     xQueueReceive(msgInQ, localRX_Message, portMAX_DELAY);
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    for (int i=0; i<8; i++){sysState.RX_Message[i] = __atomic_load_n(&localRX_Message[i], __ATOMIC_RELAXED);}
+    for (int i = 0; i < 8; i++){
+      sysState.RX_Message[i] = 
+        __atomic_load_n(&localRX_Message[i], __ATOMIC_RELAXED);
+    }
     xSemaphoreGive(sysState.mutex);
   }
 }
 
-// Sends messages from queue
-void CAN_TX_Task (void * pvParameters) {
-	uint8_t msgOut[8];
-	while (1) {
-		xQueueReceive(msgOutQ, msgOut, portMAX_DELAY);
-		xSemaphoreTake(CAN_TX_Semaphore, portMAX_DELAY);
-		CAN_TX(0x123, msgOut);
-	}
+void CAN_RX_ISR (void) {
+  uint8_t RX_Message_ISR[8];
+  uint32_t ID;
+  CAN_RX(ID, RX_Message_ISR);
+  xQueueSendFromISR(msgInQ, RX_Message_ISR, NULL);
 }
 
+void CAN_TX_ISR (void) {
+  xSemaphoreGiveFromISR(CAN_TX_Semaphore, NULL);
+}
 
-// Given an octave, note index, volume, and tone, plays the note
+void CAN_TX_Task (void * pvParameters) {
+  uint8_t msgOut[8];
+  while (1) {
+    xQueueReceive(msgOutQ, msgOut, portMAX_DELAY);
+    xSemaphoreTake(CAN_TX_Semaphore, portMAX_DELAY);
+    CAN_TX(0x123, msgOut);
+  }
+}
+
+// - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
+
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
   // FUNCTION WAVES
-  if((tone == 0)|(tone == 1)|(tone == 3)){ //SAWTOOTH OR SQUARE OR TRIANGLE
+  if((tone == 0)||(tone == 1)|(tone == 3)){ //SAWTOOTH OR SQUARE OR TRIANGLE
     static uint32_t phaseAcc = 0;
     uint32_t phaseAccChange = 0;
     uint32_t phaseInc = (oct < 4) ? (stepSizes[note] >> (4-oct)) : (stepSizes[note] << (oct-4));
@@ -433,9 +448,11 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
       }
     }
   }
+  else{
+    return 128;  // to avoid undefined return value
+  }
 }
 
-// ISR to output sound
 void sampleISR() {
   if (sysState.isSender != true){ //Only receivers output sound
     int32_t Vout = 0;
@@ -456,20 +473,8 @@ void sampleISR() {
   }
 }
 
-// ISR to store incoming CAN RX messages
-void CAN_RX_ISR (void) {
-	uint8_t RX_Message_ISR[8];
-	uint32_t ID;
-	CAN_RX(ID, RX_Message_ISR);
-	xQueueSendFromISR(msgInQ, RX_Message_ISR, NULL);
-}
+// - - - - - - - - - - - - - - - - - - SETUP - - - - - - - - - - - - - - - - - -
 
-// ISR to give the semaphore once mailbox available
-void CAN_TX_ISR (void) {
-	xSemaphoreGiveFromISR(CAN_TX_Semaphore, NULL);
-}
-
-//Function to set outputs using key matrix
 void setOutMuxBit(const uint8_t bitIdx, const bool value) {
       digitalWrite(REN_PIN,LOW);
       digitalWrite(RA0_PIN, bitIdx & 0x01);
@@ -520,46 +525,50 @@ void setup() {
   CAN_RegisterRX_ISR(CAN_RX_ISR);
   CAN_RegisterTX_ISR(CAN_TX_ISR);
   CAN_Start();
-  msgInQ = xQueueCreate(36,8); //No. items, bytes
+  msgInQ = xQueueCreate(36,8);  //No. items, bytes
   msgOutQ = xQueueCreate(36,8);
   CAN_TX_Semaphore = xSemaphoreCreateCounting(3,3);
 
   //Initialise freeRTOS
   TaskHandle_t updateKeysHandle = NULL;
   xTaskCreate(
-  updateKeysTask,		/* Function that implements the task */
-  "updateKeys",		/* Text name for the task */
-  128,      		/* Stack size in words, not bytes */
-  NULL,			/* Parameter passed into the task */
-  4,			/* Task priority */
-  &updateKeysHandle );	/* Pointer to store the task handle */
+    updateKeysTask,     /* Function that implements the task */
+    "updateKeys",       /* Text name for the task */
+    128,                /* Stack size in words, not bytes */
+    NULL,               /* Parameter passed into the task */
+    4,                  /* Task priority */
+    &updateKeysHandle   /* Pointer to store the task handle */
+  );
 
   TaskHandle_t updateDisplayHandle = NULL;
   xTaskCreate(
-  updateDisplayTask,		/* Function that implements the task */
-  "updateDisplay",		/* Text name for the task */
-  1024,      		/* Stack size in words, not bytes */
-  NULL,			/* Parameter passed into the task */
-  1,			/* Task priority */
-  &updateDisplayHandle );	/* Pointer to store the task handle */
+    updateDisplayTask,    // Function name
+    "updateDisplay",      // Text name
+    1024,                 // Stack size (words)
+    NULL,                 // Parameter for task
+    1,                    // Priority
+    &updateDisplayHandle  // Pointer
+  );
 
   TaskHandle_t decodeMessageHandle = NULL;
   xTaskCreate(
-  decodeMessageTask,		/* Function that implements the task */
-  "decodeMessage",		/* Text name for the task */
-  64,      		/* Stack size in words, not bytes */
-  NULL,			/* Parameter passed into the task */
-  2,			/* Task priority */
-  &decodeMessageHandle );	/* Pointer to store the task handle */
+    decodeMessageTask,    // Function name
+    "decodeMessage",      // Text name
+    64,                   // Stack size (words)
+    NULL,                 // Parameter for task
+    2,                    // Priority
+    &decodeMessageHandle  // Pointer
+  );
 
   TaskHandle_t CAN_TXHandle = NULL;
   xTaskCreate(
-  CAN_TX_Task,		/* Function that implements the task */
-  "CAN_TX",		/* Text name for the task */
-  64,      		/* Stack size in words, not bytes */
-  NULL,			/* Parameter passed into the task */
-  3,			/* Task priority */
-  &CAN_TXHandle );	/* Pointer to store the task handle */
+    CAN_TX_Task,    // Function name
+    "CAN_TX",       // Text name
+    64,             // Stack size (words)
+    NULL,           // Parameter for task
+    3,              // Priority
+    &CAN_TXHandle   // Pointer
+  );
 
   //Initialise hardware timer
   TIM_TypeDef *Instance = TIM1;
@@ -573,4 +582,5 @@ void setup() {
   vTaskStartScheduler();
 }
 
+// all tasks handled by TaskHandlers set up in setup function
 void loop() {}
