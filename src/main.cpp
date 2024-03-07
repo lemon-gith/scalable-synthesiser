@@ -21,7 +21,11 @@ struct {
   volatile uint8_t TX_Message[8] = {0};
   volatile uint8_t RX_Message[8] = {0};
   volatile bool isSender = false;
+  volatile uint8_t menuState= 0; //0 is met, 1 is playback, 2 is oct
+  volatile bool isSelected = false;
   volatile uint8_t met = 120;
+  volatile bool metMenuState = false; //false is met slider, true is ON/OFF
+  volatile bool metOnState = false;
   SemaphoreHandle_t mutex;
 } sysState;
 QueueHandle_t msgInQ;
@@ -67,6 +71,86 @@ std::bitset<4> readCols(){
   result[1] = digitalRead(C1_PIN);
   result[0] = digitalRead(C0_PIN);
   return result;
+}
+
+void navigate(char direction){
+  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  uint8_t menuState = sysState.menuState;
+  bool isSelected = sysState.isSelected;
+  bool metMenuState = sysState.metMenuState;
+  bool metOnState = sysState.metOnState;
+  int metValue = sysState.met;
+  uint8_t octave = sysState.octave;
+  xSemaphoreGive(sysState.mutex);
+  if(direction=='p'){ //joystick press changes isSelected state
+    isSelected = !isSelected;
+    }
+  if(isSelected==false){ //if isSelected is false, it can move between the 3 menu items
+    if(menuState==0){
+      if(direction=='d'){
+        menuState = 1;
+      }
+    }
+    else if(menuState ==1){
+      if(direction =='u'){
+        menuState = 0;
+      }
+      else if(direction =='l'){
+        menuState = 2;
+      }
+    }
+    else if(menuState ==2){
+      if(direction == 'r'){
+        menuState = 1;
+      }
+    }
+  }
+  else{ //if isSelected is true (i.e. menu item is selected)
+    if(menuState==0){
+      if(!metMenuState){
+        if(direction == 'u'){
+          metValue++;
+        }
+        else if(direction == 'd'){
+          metValue--;
+        }
+        else if(direction == 'r'){
+          metMenuState=!metMenuState;
+        }
+      }
+      else if(metMenuState){
+        if(direction=='p'){
+          metOnState = !metOnState;
+        }
+        else if(direction=='l'){
+          metMenuState=!metMenuState;
+        }
+        
+        
+      }
+    }
+    else if(menuState==2){
+      if(direction=='u'){
+        if(octave<8){
+          octave++;
+        }
+      }
+      else if(direction=='d'){
+        if(octave>0){
+          octave--;
+        }
+      }
+    }
+  }
+ 
+  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  sysState.octave = octave;
+  sysState.metOnState = metOnState;
+  sysState.metMenuState = metMenuState;
+  sysState.met = metValue;
+  sysState.menuState = menuState;
+  sysState.isSelected = isSelected;
+  xSemaphoreGive(sysState.mutex);
 }
 
 void setRow(uint8_t row){
@@ -213,6 +297,12 @@ void updateKeysTask(void * pvParameters) {
     }
     //see joystick push
     std::bitset<4> rowVals = readRow(5);
+    short joy[3];
+    //Store Joystick Values
+    joy[0] = analogRead(JOYX_PIN);
+    joy[1] = analogRead(JOYY_PIN);
+    joy[2] = rowVals[2];
+    navigate(calcJoy(joy[0], joy[1], joy[2]));
     //Store to sysState
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     // Store key string globally
@@ -224,15 +314,12 @@ void updateKeysTask(void * pvParameters) {
       int tmp = sysState.knobValues[i]+localKnobDiffs[i];
       __atomic_store_n(&sysState.knobValues[i], tmp, __ATOMIC_RELAXED);
     }
-    __atomic_store_n(&sysState.octave, sysState.knobValues[2], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
+    //__atomic_store_n(&sysState.octave, sysState.knobValues[2], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
     // Store knob pushes globally
     for (int i=0; i<4; i++){
       __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
     }
-    //Store Joystick Values
-    sysState.joy[0] = analogRead(JOYX_PIN);
-    sysState.joy[1] = analogRead(JOYY_PIN);
-    sysState.joy[2] = rowVals[2];
+    
     xSemaphoreGive(sysState.mutex);
     //
   }
@@ -265,15 +352,15 @@ void updateDisplayTask(void * pvParameters){
     u8g2.print(sysState.TX_Message[0]);
     xSemaphoreGive(sysState.mutex);
     //Metronome
-    u8g2.drawStr(60,4, "Met");
-    u8g2.drawStr(75,4,"<");
+    u8g2.drawStr(60,4, "Met:");
     u8g2.setCursor(79, 4);
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     u8g2.print(sysState.met);
+    bool metOnState = sysState.metOnState;
     xSemaphoreGive(sysState.mutex);
     u8g2.drawStr(92, 4, "BPM");
-    u8g2.drawStr(110,4,">");
-    u8g2.drawStr(114,4,"ON");
+    u8g2.setCursor(114, 4);
+    u8g2.print(metOnState ? "OFF": "ON");
     //Playback
     u8g2.drawStr(60, 12, "Pb");
     u8g2.drawCircle(78, 10, 3);
@@ -286,10 +373,12 @@ void updateDisplayTask(void * pvParameters){
     u8g2.drawFrame(1, 22, 28, 12);
     u8g2.setCursor(1+14-5, 29);
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-    u8g2.print(sysState.knobValues[0]);
-    u8g2.setCursor(16, 29);
-    u8g2.print(calcJoy(sysState.joy[0], sysState.joy[1], sysState.joy[2]));
+    u8g2.print(sysState.menuState);
+    bool isClicked = sysState.isSelected;
     xSemaphoreGive(sysState.mutex);
+    u8g2.setCursor(16, 29);
+    u8g2.print(isClicked ? 't':'f');
+
     //Tone
     u8g2.drawStr(40, 20, "Tone");
     u8g2.drawFrame(33, 22, 28, 12);
@@ -443,7 +532,7 @@ void setup() {
   //Initialise CAN
   // NOTE: When the module is a sender, loopback must be set to true!
   //       This is because without an ACK, the module will try to transmit forever.
-  CAN_Init(true);     //Set to true for loopback mode
+  CAN_Init(false);     //Set to true for loopback mode
   setCANFilter(0xd123,0x7ff);    //ID, mask
   CAN_RegisterRX_ISR(CAN_RX_ISR);
   CAN_RegisterTX_ISR(CAN_TX_ISR);
