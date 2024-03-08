@@ -6,9 +6,10 @@
 #include <STM32FreeRTOS.h>
 #include <ES_CAN.h>
 #include <bitset>
+#include <vector>
 
 
-//Constants
+//Constants#
 const uint32_t interval = 100; //Display update interval
 const char keys[12] = {
   'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'
@@ -36,7 +37,10 @@ struct {
     4, 0, knobMaxes[2], knobMaxes[3]
   }; 
   volatile bool knobPushes[4] = {0};  // VOL TONE SETTING ECHO
+  
   volatile uint8_t octave = 4;
+  volatile int8_t phase_voltages[96] = {0};
+  volatile bool keys_down[96] = {0};
 
   volatile short joy[3] = {0};
 
@@ -138,9 +142,15 @@ void CAN_TX_ISR (void);
 void CAN_TX_Task (void * pvParameters);
 
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
+/*
+// small helper function to detect overflow and clip
+int8_t inline clipped_addition(const int8_t &base, const int8_t &additive);
 
 // Plays the requested note, based on:
 // the octave, note index, volume, and tone type
+int8_t playNote(const uint8_t &oct, const int &note, 
+                 const int &idx, const uint32_t &tone);
+*/
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone);
 
 // Interrupt Service Routine for sound output

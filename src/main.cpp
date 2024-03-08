@@ -125,22 +125,22 @@ void navigate(char direction){
       case 1:  // playback menu
         break;  // TODO: implement REC playback menu
       case 2:  // octave menu
-        if(direction=='u'){
-        if(octave<8){
-          octave++;
+        if(direction == 'u'){
+          if(octave < 8){
+            octave++;
+          }
+          else if (octave == 8){
+            octave = 1;
+          }
         }
-        else if (octave==8){
-          octave = 0;
+        else if(direction == 'd'){
+          if(octave > 1){
+            octave--;
+          }
+          else if(octave == 1){
+            octave = 8;
+          }
         }
-      }
-      else if(direction=='d'){
-        if(octave>0){
-          octave--;
-        }
-        else if(octave==0){
-          octave = 8;
-        }
-      }
       default:
         // undefined menu state
         break;
@@ -200,19 +200,20 @@ void updateKeysTask(void * pvParameters){
   TickType_t xLastWakeTime = xTaskGetTickCount();
   while (1){
     vTaskDelayUntil( &xLastWakeTime, xFrequency );
-    std::bitset<32> keyBools;
-    keyBools = readKeys();
+    std::bitset<32> keyBools = readKeys();
+
     // Store key string locally
-    static char localKeyStrings[12] = {'-','-','-','-','-','-','-','-','-','-','-','-'};
+    static char localKeyStrings[12] = {
+      '-','-','-','-','-','-','-','-','-','-','-','-'
+    };
     char prevLocalKeyStrings[12];
-    for (int i=0; i<12; i++){prevLocalKeyStrings[i] = localKeyStrings[i];}
     for (int i = 0; i < 12; i++) {
-      if (keyBools[i] == 0) {
+      prevLocalKeyStrings[i] = localKeyStrings[i];
+      if (keyBools[i] == 0)
         localKeyStrings[i] = keys[i];
-      }
-      else{
+      else
         localKeyStrings[i] = '-';
-      }
+
       //Check for changes
       if (prevLocalKeyStrings[i] != localKeyStrings[i]){
         bool isPush = (prevLocalKeyStrings[i] == '-');
@@ -223,6 +224,7 @@ void updateKeysTask(void * pvParameters){
         xSemaphoreGive(sysState.mutex);
       }
     }
+
     // Send changes via CAN
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     bool localIsSender = __atomic_load_n(&sysState.isSender, __ATOMIC_RELAXED);
@@ -276,31 +278,39 @@ void updateKeysTask(void * pvParameters){
     std::bitset<4> rowVals = readRow(5);
     short joy[3];
 
-    //Store Joystick Values
+    // Store Joystick Values
     joy[0] = analogRead(JOYX_PIN);  // maybe average a few readings?
     joy[1] = analogRead(JOYY_PIN);
     joy[2] = rowVals[2];
     navigate(calcJoy(joy[0], joy[1], joy[2]));
 
-    //Store to sysState
+    // Store to sysState
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    
     // Store key string globally
-    for (int i=0; i<12; i++) {
-      __atomic_store_n(&sysState.keyStrings[i], localKeyStrings[i], __ATOMIC_RELAXED);
+    uint8_t localOctave = __atomic_load_n(&sysState.octave, __ATOMIC_RELAXED);
+    int idx = (localOctave) * 12;
+    for (int i = 0; i < 12; i++){
+      __atomic_store_n(&sysState.keyStrings[i], localKeyStrings[i], 
+        __ATOMIC_RELAXED);
+      __atomic_store_n(&sysState.keys_down[idx++], localKeyStrings[i] != '-',
+        __ATOMIC_RELAXED);  // store whether or not the key has been pressed :)
     }
+
     // Store knob values globally
     for (int i=0; i<4; i++){
       int tmp = sysState.knobValues[i]+localKnobDiffs[i];
       __atomic_store_n(&sysState.knobValues[i], tmp, __ATOMIC_RELAXED);
     }
+
     //__atomic_store_n(&sysState.octave, sysState.knobValues[2], __ATOMIC_RELAXED); //TODO: REMOVE ONCE PROPER OCTAVE CONTROL IMPLEMENTED
+
     // Store knob pushes globally
     for (int i=0; i<4; i++){
       __atomic_store_n(&sysState.knobPushes[i], localKnobPushes[i], __ATOMIC_RELAXED);
     }
     
     xSemaphoreGive(sysState.mutex);
-    //
   }
 }
 
@@ -325,7 +335,7 @@ void updateDisplayTask(void * pvParameters){
     }
     uint8_t localDotLoc[2] = {0};
     uint8_t localOctave = sysState.octave; 
-    uint8_t localSendState = sysState.TX_Message[0];
+    char localSendState = sysState.TX_Message[0];
     uint8_t localMetValue = sysState.met;
     bool metOnState = sysState.metOnState;
     uint8_t localMenuState = sysState.menuState;
@@ -449,65 +459,71 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
     uint32_t phaseInc = (oct < 4) ? 
       (stepSizes[note] >> (4 - oct)) : 
       (stepSizes[note] << (oct - 4));
-    phaseAccChange += phaseInc;
-    if (phaseAccChange == 0){
-      phaseAcc = 0;
-    }
-    else{
-      phaseAcc += phaseAccChange;
-    }
-    uint32_t phaseOut = ((phaseAcc >> 24) - 128) + 128;
-    if (tone == 0){  //SAWTOOTH
-      return phaseOut >> (8-volume);
-    }
-    else if (tone == 1){  //SQUARE
-      if (phaseOut < 128){
-        return 128 >> (8-volume);
-      }
-      else{
-        return 256 >> (8-volume);
-      }
-    }
-    else if (tone == 3){  //TRIANGLE
-      if (phaseOut > 128){
-        return ((256 - phaseOut)) >> (8-volume);
-      }
-      else{
-        return ((2*phaseOut)) >> (8-volume);
-      }
-    }
-    else{
-      return 128;  // to avoid undefined return value
+    
+    phaseAcc += phaseInc;
+
+    uint32_t phaseOut = phaseAcc >> 24;
+    switch (tone){
+      case 0:  // SAWTOOTH
+        return phaseOut;
+      case 1:  // SQUARE
+        return (phaseOut < 128) ? 128 : 256;  // thresholding phaseAcc
+      case 2:  // SINE
+        return 0;  // TODO: Implement
+      case 3:  // TRIANGLE
+        if (phaseOut > 128)
+          return 256 - phaseOut;
+        else
+          return 2 * phaseOut;
+      default:  // shouldn't happen
+        return 0;
     }
   }
-  else{
-    return 128;  // to avoid undefined return value
+  else  // this shouldn't happen
+    return 0;
+}
+
+
+int32_t playNotes(const uint32_t &vol, const uint32_t &tone){
+  uint8_t localOctave = __atomic_load_n(&sysState.octave, __ATOMIC_RELAXED);
+  int32_t Vout = 0;
+
+  //Play local keys
+  int idx = (localOctave - 1) * 12;
+  for(int i = 0; i < 12; i++){
+    bool local_key_down = 
+      __atomic_load_n(&sysState.keys_down[idx++], __ATOMIC_RELAXED);
+    //if(local_key_down){
+    char localCurrentKeystring = 
+      __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
+    if(localCurrentKeystring != '-'){
+      Vout += playNote(localOctave, i, vol, tone);
+    }//}
   }
+
+  return Vout >> (8 - vol);
 }
 
 void sampleISR() {
-  if (sysState.isSender != true){ //Only receivers output sound
-    int32_t Vout = 0;
-    uint32_t localVolume = __atomic_load_n(&sysState.knobValues[0], __ATOMIC_RELAXED);
-    uint32_t localTone = __atomic_load_n(&sysState.knobValues[1], __ATOMIC_RELAXED);
-    //Play local keys
-    for(int i=0; i<12; i++){
-      char localCurrentKeystring = 
-        __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
-      if(localCurrentKeystring != '-'){
-        Vout += playNote(sysState.octave, i, localVolume, localTone);
-      }
-    }
-    // Play received keys
-    uint8_t localRX_Message[8];
-    for (int i=0; i<8; i++){
-      localRX_Message[i] = 
+  if (!sysState.isSender){  //Only receivers output sound
+    const uint32_t localVolume = __atomic_load_n(&sysState.knobValues[0], __ATOMIC_RELAXED);
+    const uint32_t localTone = __atomic_load_n(&sysState.knobValues[1], __ATOMIC_RELAXED);
+
+    uint8_t localRX_Info[3];
+    for (int i = 0; i < 3; i++)
+      localRX_Info[i] = 
         __atomic_load_n(&sysState.RX_Message[i], __ATOMIC_RELAXED);
+
+    // stores transmitted data into sysState
+    if (localRX_Info[0] == 'P'){
+      int note_index = localRX_Info[1]*12 + localRX_Info[2];
+      sysState.keys_down[note_index] = 1;
+      // TODO: ^ should this be atomic?
     }
-    if (localRX_Message[0] == 'P'){
-      Vout += playNote(localRX_Message[1], localRX_Message[2], 
-                       localVolume, localTone);
-    }
+    // TODO: ^ should this be a for loop or sth?
+    
+    uint8_t Vout = playNotes(localVolume, localTone);
+
     analogWrite(OUTR_PIN, Vout);
   }
 }
