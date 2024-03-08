@@ -452,8 +452,8 @@ void CAN_TX_Task (void * pvParameters) {
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
 
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
-  // FUNCTION WAVES
-  if((tone < 4) && (tone != 2)){  // SINE not implemented yet
+  // FUNCTION WAVES (based on stepSizes)
+  if(tone < 3){
     static uint32_t phaseAcc = 0;
     uint32_t phaseAccChange = 0;
     uint32_t phaseInc = (oct < 4) ? 
@@ -468,9 +468,7 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
         return phaseOut;
       case 1:  // SQUARE
         return (phaseOut < 128) ? 128 : 256;  // thresholding phaseAcc
-      case 2:  // SINE
-        return 0;  // TODO: Implement
-      case 3:  // TRIANGLE
+      case 2:  // TRIANGLE
         if (phaseOut > 128)
           return 256 - phaseOut;
         else
