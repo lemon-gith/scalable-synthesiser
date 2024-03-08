@@ -9,8 +9,9 @@
 #include <vector>
 
 
-//Constants#
+//Constants
 const uint32_t interval = 100; //Display update interval
+const int sample_freq = 22000; //Sample rate of device
 const char keys[12] = {
   'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'
 };
@@ -22,6 +23,7 @@ const uint32_t stepSizes [] = {
   72232452, 76527617, 81078186, 85899346, 91007187, 96418756
 };
 const char* toneNames [] = {"saw", "sqr", "tri", "sin"};
+const char* toneFileNames [] = {"metronome.txt"};
 const uint32_t knobMaxes[4] = {
   8, (sizeof(toneNames)/sizeof(toneNames[0]))-1, 5, 4
 };
@@ -56,6 +58,9 @@ struct {
   volatile uint8_t dotLocation[2] = {58, 4};
   SemaphoreHandle_t mutex;
 } sysState;
+
+//Array of tone file arrays
+int* toneFiles = {};
 
 QueueHandle_t msgInQ;
 QueueHandle_t msgOutQ;
