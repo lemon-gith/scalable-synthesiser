@@ -1,5 +1,5 @@
 #include "main.h"
-
+#include "tones.h"
 
 // - - - - - - - - - - - - - - READING INPUTS - - - - - - - - - - - - - - 
 
@@ -452,33 +452,47 @@ void CAN_TX_Task (void * pvParameters) {
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
 
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
-  // FUNCTION WAVES (based on stepSizes)
-  if(tone < 3){
-    static uint32_t phaseAcc = 0;
-    uint32_t phaseAccChange = 0;
-    uint32_t phaseInc = (oct < 4) ? 
-      (stepSizes[note] >> (4 - oct)) : 
-      (stepSizes[note] << (oct - 4));
-    
-    phaseAcc += phaseInc;
+  static const int tone_divider = 3; // divides function vs sampled tones
+  static uint32_t phaseAcc = 0;
+  uint32_t phaseAccChange = 0;
+  uint32_t phaseInc = (oct < 4) ? 
+    (stepSizes[note] >> (4 - oct)) : 
+    (stepSizes[note] << (oct - 4));
+  
+  phaseAcc += phaseInc;
 
-    uint32_t phaseOut = phaseAcc >> 24;
+  //Scale to -128 <= phaseOut <= 127
+  int32_t phaseOut = (phaseAcc >> 24) - 128;
+  // FUNCTION WAVES (based on stepSizes values)
+  if(tone < tone_divider){
     switch (tone){
       case 0:  // SAWTOOTH
         return phaseOut;
       case 1:  // SQUARE
-        return (phaseOut < 128) ? 128 : 256;  // thresholding phaseAcc
+        return (phaseOut < 0) ? -128 : 127;  // thresholding phaseAcc
       case 2:  // TRIANGLE
-        if (phaseOut > 128)
-          return 256 - phaseOut;
+        if (phaseOut > 0)
+          return (-phaseOut << 2) + 128;
         else
-          return 2 * phaseOut;
+          return (phaseOut << 2) + 128;
       default:  // shouldn't happen
         return 0;
     }
   }
-  else  // this shouldn't happen
-    return 0;
+  // SAMPLED WAVES (based on stored values)
+  else{
+    static int phaseInc = -1;
+    phaseInc += 1;
+    switch (tone){
+      case (tone_divider):  // TODO: Implement SINE
+        return 0;
+      case 4: // Special metronome case (need to switch back to 255 after)
+        if (phaseInc >= sizeof(metronome)){phaseInc = 0;}
+        return (metronome[phaseInc] >> 23) - 128;
+      default: // shouldn't happen
+        return 0;
+    }
+  }
 }
 
 
@@ -521,8 +535,7 @@ void sampleISR() {
     // TODO: ^ should this be a for loop or sth?
     
     uint8_t Vout = playNotes(localVolume, localTone);
-
-    analogWrite(OUTR_PIN, Vout);
+    analogWrite(OUTR_PIN, Vout + 128);
   }
 }
 
