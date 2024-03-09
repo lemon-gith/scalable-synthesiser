@@ -58,7 +58,7 @@ std::bitset<12> readKnobs(){
 }
 
 char calcJoy(short x, short y, short p){ 
-  if(p == 0){  // TODO: engage state machine
+  if(p == 1){  // i.e. if joystick state is ARMED
     return 'p';
   }
   else if(x < 300 &&  (y < 600 && y > 200)){
@@ -228,41 +228,55 @@ void updateKeysTask(void * pvParameters){
     // Send changes via CAN
     xSemaphoreTake(sysState.mutex, portMAX_DELAY);
     bool localIsSender = __atomic_load_n(&sysState.isSender, __ATOMIC_RELAXED);
-    if (localIsSender == true){
+    if (localIsSender){
       uint8_t localTX_Message[8];
-      for (int i=0; i<8; i++){localTX_Message[i] = __atomic_load_n(&sysState.TX_Message[i], __ATOMIC_RELAXED);}
+      for (int i = 0; i < 8; i++){
+        localTX_Message[i] = 
+          __atomic_load_n(&sysState.TX_Message[i], __ATOMIC_RELAXED);
+      }
       xQueueSend( msgOutQ, localTX_Message, portMAX_DELAY);
     }
     xSemaphoreGive(sysState.mutex);
+
     // Store knob values and push bools
     std::bitset<12> prevKnobBools;
     static std::bitset<12> knobBools = readKnobs();
     prevKnobBools = knobBools;
     knobBools = readKnobs();
-    int localKnobDiffs[4] = {0,0,0,0};
-    int lastLegalDiff[4] = {0,0,0,0};
+    int localKnobDiffs[4] = {0};
+    int lastLegalDiff[4] = {0};
     bool localKnobPushes[4];
-    for (int i=0; i<4; i++){
+    for (int i = 0; i < 4; i++){
       //Knob values in format {B,A}
       std::bitset<2> prevBool, currBool;
-      prevBool[1] = prevKnobBools[(2*i)+1];
+      prevBool[1] = prevKnobBools[2*i + 1];
       prevBool[0] = prevKnobBools[2*i];
-      currBool[1] = knobBools[(2*i)+1];
+      currBool[1] = knobBools[2*i + 1];
       currBool[0] = knobBools[2*i];
+
       // Read sys knob values
       uint32_t localKnobValues[4];
       xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-      for (int i=0; i<4; i++){localKnobValues[i] = __atomic_load_n(&sysState.knobValues[i], __ATOMIC_RELAXED);}
+      for (int i = 0; i < 4; i++){
+        localKnobValues[i] = 
+          __atomic_load_n(&sysState.knobValues[i], __ATOMIC_RELAXED);
+      }
       xSemaphoreGive(sysState.mutex);
-      if(((prevBool == 0b00) && (currBool == 0b01)) || ((prevBool == 0b11) && (currBool == 0b10))){
+
+      if(((prevBool == 0b00) && (currBool == 0b01)) || 
+         ((prevBool == 0b11) && (currBool == 0b10))){
         localKnobDiffs[3-i] = (localKnobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
         lastLegalDiff[3-i] = (localKnobValues[3-i] < knobMaxes[3-i]) ? 1 : 0;
       }
-      else if(((prevBool == 0b01) && (currBool == 0b00)) || ((prevBool == 0b10) && (currBool == 0b11))){
+      else if(((prevBool == 0b01) && (currBool == 0b00)) || 
+              ((prevBool == 0b10) && (currBool == 0b11))){
         localKnobDiffs[3-i] = (localKnobValues[3-i] > 0) ? -1 : 0;
         lastLegalDiff[3-i] = (localKnobValues[3-i] > 0) ? -1 : 0;
       }
-      else if(((prevBool == 0b00) && (currBool == 0b11)) || ((prevBool == 0b11) && (currBool == 0b00)) || ((prevBool == 0b01) && (currBool == 0b10)) || ((prevBool == 0b10) && (currBool == 0b01))){
+      else if(((prevBool == 0b00) && (currBool == 0b11)) || 
+              ((prevBool == 0b11) && (currBool == 0b00)) || 
+              ((prevBool == 0b01) && (currBool == 0b10)) || 
+              ((prevBool == 0b10) && (currBool == 0b01))){
         //other legal transition
         localKnobDiffs[3-i] = 0;
       }
@@ -273,7 +287,7 @@ void updateKeysTask(void * pvParameters){
       //Knob pushes
       localKnobPushes[3-i] = !knobBools[i+8];
     }
-
+    
     //see joystick push
     std::bitset<4> rowVals = readRow(5);
     short joy[3];
@@ -281,7 +295,9 @@ void updateKeysTask(void * pvParameters){
     // Store Joystick Values
     joy[0] = analogRead(JOYX_PIN);  // maybe average a few readings?
     joy[1] = analogRead(JOYY_PIN);
-    joy[2] = rowVals[2];
+    xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+    joy[2] = sysState.next_state('j', !rowVals[2]);
+    xSemaphoreGive(sysState.mutex);
     navigate(calcJoy(joy[0], joy[1], joy[2]));
 
     // Store to sysState

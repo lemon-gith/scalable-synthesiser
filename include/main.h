@@ -49,8 +49,7 @@ struct {
   volatile bool keys_down[96] = {0};
 
   volatile short joystick_pos[2] = {0};
-  volatile ButtonPress joystickPush{0};  // 0th button
-  // ^ TODO: implement somehow?
+  // ^ TODO: is this being used?
 
   volatile uint8_t TX_Message[8] = {0};
   volatile uint8_t RX_Message[8] = {0};
@@ -63,6 +62,20 @@ struct {
   volatile bool metOnState = false;
   volatile uint8_t dotLocation[2] = {58, 4};
   SemaphoreHandle_t mutex;
+
+  ButtonPress::State next_state(char button, const bool &isPressed){
+    static ButtonPress joystickPush{'j'};  // 0th button
+    switch (button){
+      case 'j':
+        return joystickPush.nextState(isPressed);
+      case 'v':
+        // implement volume button press
+        return ButtonPress::OFF;
+      default:
+        // hopefully shouldn't get this
+        return ButtonPress::OFF;
+    }
+  }
 } sysState;
 
 QueueHandle_t msgInQ;

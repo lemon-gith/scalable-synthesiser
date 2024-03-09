@@ -9,11 +9,11 @@
 
 // a state machine to ensure good UX for button presses
 struct ButtonPress {
-  uint8_t knob_name;
+  char knob_name;
   enum State{OFF, ARMED, ON} state;
 
   // constructs a button state machine, given a name, starts OFF
-  ButtonPress(uint8_t knob_name){
+  ButtonPress(char knob_name){
     this->knob_name = knob_name;
     this->state = OFF;
   }
