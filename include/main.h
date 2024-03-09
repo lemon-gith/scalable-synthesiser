@@ -7,6 +7,9 @@
 #include <ES_CAN.h>
 #include <bitset>
 #include <vector>
+#include <cstring>
+
+#include "state_machines.h"
 
 
 //Constants#
@@ -39,10 +42,12 @@ struct {
   volatile bool knobPushes[4] = {0};  // VOL TONE SETTING ECHO
   
   volatile uint8_t octave = 4;
-  volatile int8_t phase_voltages[96] = {0};
+  volatile int32_t phase_accumulators[96] = {0};
   volatile bool keys_down[96] = {0};
 
-  volatile short joy[3] = {0};
+  volatile short joystick_pos[2] = {0};
+  volatile ButtonPress joystickPush{0};  // 0th button
+  // ^ TODO: implement somehow?
 
   volatile uint8_t TX_Message[8] = {0};
   volatile uint8_t RX_Message[8] = {0};
@@ -142,16 +147,18 @@ void CAN_TX_ISR (void);
 void CAN_TX_Task (void * pvParameters);
 
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
-/*
-// small helper function to detect overflow and clip
-int8_t inline clipped_addition(const int8_t &base, const int8_t &additive);
 
-// Plays the requested note, based on:
-// the octave, note index, volume, and tone type
-int8_t playNote(const uint8_t &oct, const int &note, 
-                 const int &idx, const uint32_t &tone);
-*/
-int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone);
+// small helper function to detect overflow and clip
+int32_t inline jack_the_clipper(int32_t Vout);
+
+// Increments the requested note's phase accumulator, based on:
+// the octave, note index, and the tone type
+int32_t playNote(uint8_t oct, uint8_t note, uint32_t tone, 
+              int32_t *phase_accumulator);
+
+// takes in the desired volume and tone, then sums the outputs from all notes
+// via a call to playNote for each pressed note
+int32_t playNotes(const uint32_t &vol, const uint32_t &tone);
 
 // Interrupt Service Routine for sound output
 void sampleISR(void);

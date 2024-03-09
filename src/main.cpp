@@ -289,7 +289,7 @@ void updateKeysTask(void * pvParameters){
     
     // Store key string globally
     uint8_t localOctave = __atomic_load_n(&sysState.octave, __ATOMIC_RELAXED);
-    int idx = (localOctave) * 12;
+    int idx = (localOctave - 1) * 12;
     for (int i = 0; i < 12; i++){
       __atomic_store_n(&sysState.keyStrings[i], localKeyStrings[i], 
         __ATOMIC_RELAXED);
@@ -451,16 +451,17 @@ void CAN_TX_Task (void * pvParameters) {
 
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
 
-int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
+int32_t playNote(uint8_t oct, uint8_t note, uint32_t tone, int32_t *phase_accumulator){
   // FUNCTION WAVES
   if((tone < 4) && (tone != 2)){  // SINE not implemented yet
-    static uint32_t phaseAcc = 0;
-    uint32_t phaseAccChange = 0;
+    uint32_t phaseAcc = *phase_accumulator;
     uint32_t phaseInc = (oct < 4) ? 
       (stepSizes[note] >> (4 - oct)) : 
       (stepSizes[note] << (oct - 4));
     
     phaseAcc += phaseInc;
+
+    *phase_accumulator = phaseAcc;
 
     uint32_t phaseOut = phaseAcc >> 24;
     switch (tone){
@@ -483,23 +484,40 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
     return 0;
 }
 
+int32_t inline jack_the_clipper(int32_t Vout, const uint32_t &vol){
+  const int32_t clip = 4000;
+  Vout >>= (vol - 8);
+  if (Vout > clip)
+    return clip;
+  else if (Vout < -clip)
+    return -clip;
+  else
+    return Vout;
+}
 
 int32_t playNotes(const uint32_t &vol, const uint32_t &tone){
   uint8_t localOctave = __atomic_load_n(&sysState.octave, __ATOMIC_RELAXED);
+  int32_t noteV = 0;  // TODO: in case we want to try an intermediate operation
   int32_t Vout = 0;
 
   //Play local keys
+  bool local_key_down;
+  int32_t local_phase_accumulator;
   int idx = (localOctave - 1) * 12;
   for(int i = 0; i < 12; i++){
-    bool local_key_down = 
+    local_key_down = 
       __atomic_load_n(&sysState.keys_down[idx++], __ATOMIC_RELAXED);
-    //if(local_key_down){
-    char localCurrentKeystring = 
-      __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
-    if(localCurrentKeystring != '-'){
-      Vout += playNote(localOctave, i, vol, tone);
-    }//}
+    if(local_key_down){
+      local_phase_accumulator = 
+        __atomic_load_n(&sysState.phase_accumulators[i], __ATOMIC_RELAXED);
+
+      noteV = playNote(localOctave, i, tone, &local_phase_accumulator);
+      Vout += noteV;
+    
+      __atomic_store_n(&sysState.phase_accumulators[i], local_phase_accumulator, __ATOMIC_RELAXED);
+    }
   }
+  //Vout = jack_the_clipper(Vout, vol);
 
   return Vout >> (8 - vol);
 }
@@ -517,8 +535,7 @@ void sampleISR() {
     // stores transmitted data into sysState
     if (localRX_Info[0] == 'P'){
       int note_index = localRX_Info[1]*12 + localRX_Info[2];
-      sysState.keys_down[note_index] = 1;
-      // TODO: ^ should this be atomic?
+      __atomic_store_n(&sysState.keys_down[note_index], 1, __ATOMIC_RELAXED);
     }
     // TODO: ^ should this be a for loop or sth?
     
