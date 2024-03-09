@@ -481,11 +481,33 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
   }
   // SAMPLED WAVES (based on stored values)
   else{
-    static int phaseCounter = -1;
+    static uint32_t phaseCounter = 0;
     phaseCounter += 1;
     switch (tone){
       case (tone_divider):  // TODO: Implement SINE
-        return 0;
+        {
+          //note offset
+          int noteShift = note-9;
+          float noteShiftPow = noteMultiplierNumerator/noteMultiplierDenominator;
+          for (int i=0; i<abs(noteShift); i++){
+            noteShiftPow = (noteShift > 0) ? 
+                (noteShiftPow*noteMultiplierNumerator)/noteMultiplierDenominator :
+                (noteShiftPow*noteMultiplierDenominator)/noteMultiplierNumerator;
+          }
+          //octave multiplier
+          int octShift = oct-4;
+          float octShiftPow = 1;
+          for (int i=0; i<abs(octShift); i++){
+            octShiftPow = (octShift > 0) ?
+                octShiftPow * 2:
+                octShiftPow / 2;
+          }
+          float adjustedFloatCounter = (8*phaseCounter*noteShiftPow)*(octShiftPow);
+          int adjustedIntCounter = static_cast<int>(adjustedFloatCounter);
+          if (adjustedFloatCounter >= (sizeof(sine)/sizeof(sine[0]))){phaseCounter = 0;}
+          // Serial.println(adjustedIntCounter);
+          return ((sine[adjustedIntCounter] >> 23) - 128);
+        }
       case 255: // Special metronome case
         if (phaseCounter >= (sizeof(metronome)/sizeof(metronome[0]))){phaseCounter = 0;}
         return ((metronome[phaseCounter] >> 23) - 128);
@@ -516,7 +538,7 @@ int32_t playNotes(const uint32_t &vol, const uint32_t &tone){
   // Play metronome
   static int metronomeCounter = 0;
   if (sysState.metOnState == true){ // TODO: should these be atomic?
-    int metSamplePeriod = (sample_freq*60)/(sysState.met);
+    int metSamplePeriod = (sampleFreq*60)/(sysState.met);
     if (metronomeCounter <= 0){
       metronomeCounter = metSamplePeriod;
     }
