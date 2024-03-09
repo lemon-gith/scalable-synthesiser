@@ -471,24 +471,24 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
       case 1:  // SQUARE
         return (phaseOut < 0) ? -128 : 127;  // thresholding phaseAcc
       case 2:  // TRIANGLE
-        if (phaseOut > 0)
-          return (-phaseOut << 2) + 128;
-        else
-          return (phaseOut << 2) + 128;
+        if (phaseOut > 0){
+          phaseOut = -phaseOut;
+        }
+        return (phaseOut + 64) << 2;
       default:  // shouldn't happen
         return 0;
     }
   }
   // SAMPLED WAVES (based on stored values)
   else{
-    static int phaseInc = -1;
-    phaseInc += 1;
+    static int phaseCounter = -1;
+    phaseCounter += 1;
     switch (tone){
       case (tone_divider):  // TODO: Implement SINE
         return 0;
-      case 4: // Special metronome case (need to switch back to 255 after)
-        if (phaseInc >= sizeof(metronome)){phaseInc = 0;}
-        return (metronome[phaseInc] >> 23) - 128;
+      case 255: // Special metronome case
+        if (phaseCounter >= (sizeof(metronome)/sizeof(metronome[0]))){phaseCounter = -1;}
+        return (phaseCounter == -1) ? -1 : ((metronome[phaseCounter] >> 23) - 128);
       default: // shouldn't happen
         return 0;
     }
@@ -511,6 +511,23 @@ int32_t playNotes(const uint32_t &vol, const uint32_t &tone){
     if(localCurrentKeystring != '-'){
       Vout += playNote(localOctave, i, vol, tone);
     }//}
+  }
+
+  // Play metronome
+  static int metronomeCounter = 0;
+  if (sysState.metOnState == true){ // TODO: should these be atomic?
+    int metSamplePeriod = (sample_freq*60)/(sysState.met);
+    if (metronomeCounter <= 0){
+      metronomeCounter = metSamplePeriod;
+    }
+    else{
+      metronomeCounter -= 1;
+    }
+    //extra -3 is to give time to reset phaseCounter in playNote
+    //should be handled when polyphony added
+    if (metSamplePeriod-(sizeof(metronome)/sizeof(metronome[0])-3) < metronomeCounter){
+      Vout += playNote(0, 0, vol, 255); //no need for octave or note
+    }
   }
 
   return Vout >> (8 - vol);
