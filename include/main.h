@@ -151,17 +151,24 @@ void CAN_TX_Task (void * pvParameters);
 
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
 
-// small helper function to detect overflow and clip
-int32_t inline jack_the_clipper(int32_t Vout);
+// it plays the metronome...
+// holds an internal metronome counter
+int32_t playMetronome();
+
+// for playing sampled tones, like sine waves
+// uses internal array of phase counters
+int32_t playSampled(uint32_t tone, uint8_t oct, uint8_t note, int idx);
 
 // Increments the requested note's phase accumulator, based on:
 // the octave, note index, and the tone type
-int32_t playNote(uint8_t oct, uint8_t note, uint32_t tone, 
-              int32_t *phase_accumulator);
+int32_t playFunction(uint32_t tone, uint8_t oct, uint8_t note, int idx);
+
+// small helper function to detect overflow and clip
+int32_t inline jack_the_clipper(int32_t Vout, const uint32_t &vol);
 
 // takes in the desired volume and tone, then sums the outputs from all notes
 // via a call to playNote for each pressed note
-int32_t playNotes(const uint32_t &vol, const uint32_t &tone);
+int32_t playNotes(const uint32_t &tone, const uint32_t &vol);
 
 // Interrupt Service Routine for sound output
 void sampleISR(void);
