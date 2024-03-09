@@ -12,8 +12,11 @@
 #include "state_machines.h"
 
 
-//Constants#
+//Constants
 const uint32_t interval = 100; //Display update interval
+const int sampleFreq = 22000; //Sample rate of device
+const int noteMultiplierNumerator = 30403886; //note shift helper
+const int noteMultiplierDenominator = 28697447;
 const char keys[12] = {
   'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g', 'G', 'a', 'A', 'b'
 };
@@ -24,7 +27,7 @@ const uint32_t stepSizes [] = {
   51076057, 54113197, 57330935, 60740010, 64351799, 68178356, 
   72232452, 76527617, 81078186, 85899346, 91007187, 96418756
 };
-const char* toneNames [] = {"saw", "sqr", "sin", "tri"};
+const char* toneNames [] = {"saw", "sqr", "tri", "sin"}; //TODO: REMOVE MET ONCE TESTED
 const uint32_t knobMaxes[4] = {
   8, (sizeof(toneNames)/sizeof(toneNames[0]))-1, 5, 4
 };

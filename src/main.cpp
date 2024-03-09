@@ -1,5 +1,5 @@
 #include "main.h"
-
+#include "tones.h"
 
 // - - - - - - - - - - - - - - READING INPUTS - - - - - - - - - - - - - - 
 
@@ -452,36 +452,81 @@ void CAN_TX_Task (void * pvParameters) {
 // - - - - - - - - - - - - - - - - - NOISE GEN - - - - - - - - - - - - - - - - -
 
 int32_t playNote(uint8_t oct, uint8_t note, uint32_t tone, int32_t *phase_accumulator){
-  // FUNCTION WAVES
-  if((tone < 4) && (tone != 2)){  // SINE not implemented yet
-    uint32_t phaseAcc = *phase_accumulator;
-    uint32_t phaseInc = (oct < 4) ? 
-      (stepSizes[note] >> (4 - oct)) : 
-      (stepSizes[note] << (oct - 4));
-    
-    phaseAcc += phaseInc;
+  static const int tone_divider = 3; // divides function vs sampled tones
+  static uint32_t phaseCounter = 0;
 
-    *phase_accumulator = phaseAcc;
+  
+  if (tone == 255){ // Special metronome case
+        if (phaseCounter >= (sizeof(metronome)/sizeof(metronome[0])))
+          phaseCounter = 0;
+        return (metronome[phaseCounter] >> 23) - 128;
+  }
+  
+  
+  uint32_t phaseAcc = *phase_accumulator;
+  uint32_t phaseAccChange = 0;
+  uint32_t phaseInc = (oct < 4) ? 
+    (stepSizes[note] >> (4 - oct)) : 
+    (stepSizes[note] << (oct - 4));
+  
+  phaseAcc += phaseInc;
+  
+  *phase_accumulator = phaseAcc;
 
-    uint32_t phaseOut = phaseAcc >> 24;
+  //Scale to -128 <= phaseOut <= 127
+  int32_t phaseOut = (phaseAcc >> 24) - 128;
+  // FUNCTION WAVES (based on stepSizes values)
+  if(tone < tone_divider){
     switch (tone){
       case 0:  // SAWTOOTH
         return phaseOut;
       case 1:  // SQUARE
-        return (phaseOut < 128) ? 128 : 256;  // thresholding phaseAcc
-      case 2:  // SINE
-        return 0;  // TODO: Implement
-      case 3:  // TRIANGLE
-        if (phaseOut > 128)
-          return 256 - phaseOut;
-        else
-          return 2 * phaseOut;
+        return (phaseOut < 0) ? -128 : 127;  // thresholding phaseAcc
+      case 2:  // TRIANGLE
+        if (phaseOut > 0)
+          phaseOut = -phaseOut;
+        return (phaseOut + 64) << 2;
       default:  // shouldn't happen
         return 0;
     }
   }
-  else  // this shouldn't happen
-    return 0;
+  // SAMPLED WAVES (based on stored values)
+  else{
+    phaseCounter += 1;
+    switch (tone){
+      case (tone_divider):  // tone 3 = SINE
+      {
+        //note offset
+        int noteShift = note - 9;
+        float noteShiftPow = noteMultiplierNumerator/noteMultiplierDenominator;
+        for (int i = 0; i < abs(noteShift); i++){
+          noteShiftPow = (noteShift > 0) ?  // TODO: can I rewrite a little?
+              (noteShiftPow * noteMultiplierNumerator)/noteMultiplierDenominator :
+              (noteShiftPow * noteMultiplierDenominator)/noteMultiplierNumerator;
+        }
+
+        //octave multiplier
+        int octShift = oct - 4;
+        float octShiftPow = 1;
+        for (int i = 0; i < abs(octShift); i++){
+          octShiftPow = (octShift > 0) ?
+              octShiftPow * 2:
+              octShiftPow / 2;
+        }
+
+        float adjustedFloatCounter = 
+          (8 * phaseCounter * noteShiftPow) * octShiftPow;
+        int adjustedIntCounter = static_cast<int>(adjustedFloatCounter);
+        if (adjustedFloatCounter >= (sizeof(sine) / sizeof(sine[0])))
+          phaseCounter = 0;
+
+        // Serial.println(adjustedIntCounter);
+        return (sine[adjustedIntCounter] >> 23) - 128;
+      }
+      default: // shouldn't happen
+        return 0;
+    }
+  }
 }
 
 int32_t inline jack_the_clipper(int32_t Vout, const uint32_t &vol){
@@ -517,6 +562,26 @@ int32_t playNotes(const uint32_t &vol, const uint32_t &tone){
       __atomic_store_n(&sysState.phase_accumulators[i], local_phase_accumulator, __ATOMIC_RELAXED);
     }
   }
+
+  // Play metronome
+  static int metronomeCounter = 0;
+  if (sysState.metOnState){ // TODO: should these be atomic?
+    int metSamplePeriod = (sampleFreq*60)/(sysState.met);
+    if (metronomeCounter <= 0){
+      metronomeCounter = metSamplePeriod;
+    }
+    else{
+      metronomeCounter -= 1;
+    }
+    //extra -3 is to give time to reset phaseCounter in playNote
+    //should be handled when polyphony added
+    if (metronomeCounter > metSamplePeriod-(sizeof(metronome)/sizeof(metronome[0]))){
+      Vout += playNote(0, 0, 255, nullptr); //no need for octave or note
+    }
+  }
+  else{
+    metronomeCounter = 0;
+  }
   //Vout = jack_the_clipper(Vout, vol);
 
   return Vout >> (8 - vol);
@@ -540,8 +605,7 @@ void sampleISR() {
     // TODO: ^ should this be a for loop or sth?
     
     uint8_t Vout = playNotes(localVolume, localTone);
-
-    analogWrite(OUTR_PIN, Vout);
+    analogWrite(OUTR_PIN, Vout + 128);
   }
 }
 
