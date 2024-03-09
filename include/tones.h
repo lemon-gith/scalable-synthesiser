@@ -1,7 +1,7 @@
 #ifndef TONES_H
 #define TONES_H
 
-#include <Arduino.h>
+#include "main.h"
 
 // No file system we die like men
 // TODO: write normal comment
