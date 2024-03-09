@@ -487,8 +487,8 @@ int32_t playNote(uint8_t oct, uint8_t note, uint32_t volume, uint32_t tone){
       case (tone_divider):  // TODO: Implement SINE
         return 0;
       case 255: // Special metronome case
-        if (phaseCounter >= (sizeof(metronome)/sizeof(metronome[0]))){phaseCounter = -1;}
-        return (phaseCounter == -1) ? -1 : ((metronome[phaseCounter] >> 23) - 128);
+        if (phaseCounter >= (sizeof(metronome)/sizeof(metronome[0]))){phaseCounter = 0;}
+        return ((metronome[phaseCounter] >> 23) - 128);
       default: // shouldn't happen
         return 0;
     }
@@ -525,9 +525,12 @@ int32_t playNotes(const uint32_t &vol, const uint32_t &tone){
     }
     //extra -3 is to give time to reset phaseCounter in playNote
     //should be handled when polyphony added
-    if (metSamplePeriod-(sizeof(metronome)/sizeof(metronome[0])-3) < metronomeCounter){
+    if (metronomeCounter > metSamplePeriod-(sizeof(metronome)/sizeof(metronome[0]))){
       Vout += playNote(0, 0, vol, 255); //no need for octave or note
     }
+  }
+  else{
+    metronomeCounter = 0;
   }
 
   return Vout >> (8 - vol);
