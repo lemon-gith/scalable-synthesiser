@@ -475,7 +475,7 @@ int32_t playMetronome(){
   metPhaseCounter++;
   if (metPhaseCounter >= (sizeof(metronome)/sizeof(metronome[0])))
     metPhaseCounter = 0;
-  return (metronome[metPhaseCounter] >> 23) - 128;
+  return (metronome[metPhaseCounter] >> 23);
 }
 
 int32_t playSampled(uint32_t tone, uint8_t oct, uint8_t note, int idx){
@@ -548,9 +548,9 @@ int32_t playFunction(uint32_t tone, uint8_t oct, uint8_t note, int idx){
 }
 
 int32_t inline jack_the_clipper(int32_t Vout, const uint32_t &vol){
-  const int32_t clip = 4000;
-  Vout >>= (vol - 8);
-  if (Vout > clip)
+  const int32_t clip = 128;
+  Vout >>= (8 - vol);
+  if (Vout > clip-1)
     return clip;
   else if (Vout < -clip)
     return -clip;
@@ -594,9 +594,8 @@ int32_t playNotes(const uint32_t &tone, const uint32_t &vol){
   else{
     metronomeCounter = 0;
   }
-  //Vout = jack_the_clipper(Vout, vol);
-
-  return Vout >> (8 - vol);
+  Vout = jack_the_clipper(Vout, vol);
+  return Vout + 128;
 }
 
 void sampleISR() {
@@ -616,8 +615,8 @@ void sampleISR() {
     }
     // TODO: ^ should this be a for loop or sth?
     
-    uint8_t Vout = playNotes(localTone, localVolume);
-    analogWrite(OUTR_PIN, Vout + 128);
+    int8_t Vout = playNotes(localTone, localVolume);
+    analogWrite(OUTR_PIN, Vout);
   }
 }
 
