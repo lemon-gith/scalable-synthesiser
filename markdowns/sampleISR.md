@@ -14,6 +14,15 @@ The frequency for this interrupt is constant at 22kHz. This frequency is set so 
 
 - Calculating the execution time
     - Explain measurement method
+
+## Measurement Methodology
+
+1. Initial Setup:
+    1. Disable all other thread tasks and ISRs through preprocessor directives to isolate the `CAN_TX_Task`.
+    2. Increased the size of `msgOutQ` to 1000 to prevent the task from blocking.
+    3. Configured a loop at the end of the `setup` function to execute the task 32 times for averaging the execution time.
+2. Worst-case configuration
+    1. Adjusted the ISR code to ensure all conditional statement would always evaluate to true.
  
 | Initiation Interval (ms) | Execution Time (ms) |
 | --- | --- |
