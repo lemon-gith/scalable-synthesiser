@@ -59,31 +59,24 @@ std::bitset<12> readKnobs(){
 
 char calcJoy(short x, short y, short p){ 
   // TODO: adjust x and y to be centered around 0
-  char dir;
   if(p == 1){  // i.e. if joystick state is ARMED
-    dir = 'p';
+    return 'p';
   }
   else if(x < 300 &&  (y < 600 && y > 200)){
-    dir = 'r';
+    return 'r';
   }
   else if (x > 700 && (y < 600 && y > 200)){
-    dir = 'l';
+    return 'l';
   }
   else if ((x < 600 && x > 200) && y < 200){
-    dir = 'u';
+    return 'u';
   }
   else if ((x < 600 && x > 200) && y > 700){
-    dir = 'd';
+    return 'd';
   }
   else{
-    dir = 's';
+    return 's';
   }
-
-  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
-  dir = sysState.next_state(dir);
-  xSemaphoreGive(sysState.mutex);
-
-  return dir;
 }
 
 void navigate(char direction){
@@ -133,22 +126,22 @@ void navigate(char direction){
       case 1:  // playback menu
         break;  // TODO: implement REC playback menu
       case 2:  // octave menu
+        static char prev_direction;
+        if (direction == prev_direction)
+          break;
+
         if(direction == 'u'){
-          if(octave < 8){
-            octave++;
-          }
-          else if (octave == 8){
-            octave = 1;
-          }
+          octave++;
+          if (octave == 8)
+            octave = 1;  // TODO: remove ugly-sounding octaves (e.g. 1, 8)
         }
         else if(direction == 'd'){
-          if(octave > 1){
-            octave--;
-          }
-          else if(octave == 1){
+          octave--;
+          if(octave == 1)
             octave = 8;
-          }
         }
+        prev_direction = direction;
+        break;
       default:
         // undefined menu state
         break;
@@ -346,7 +339,6 @@ void updateDisplayTask(void * pvParameters){
     // DISPLAY UPDATE
     u8g2.clearBuffer();  // clear internal write memory
     u8g2.setFont(u8g2_font_u8glib_4_tf);  // choose a suitable font
-    // Display last sent/received CAN message
     
     // Take all the necessary variables
     xSemaphoreTake(sysState.mutex, portMAX_DELAY); 
@@ -358,7 +350,8 @@ void updateDisplayTask(void * pvParameters){
         __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
     }
     uint8_t localDotLoc[2] = {0};
-    uint8_t localOctave = sysState.octave; 
+    uint8_t localOctave = sysState.octave;
+    // Display last sent/received CAN message
     char localSendState = sysState.TX_Message[0];
     uint8_t localMetValue = sysState.met;
     bool metOnState = sysState.metOnState;

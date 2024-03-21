@@ -76,27 +76,6 @@ struct {
         return ButtonPress::OFF;
     }
   }
-
-  // gets next state of a joystick flick action
-  char next_state(char dir){
-    static JoystickFlick joystickFlick;
-    JoystickFlick::State new_state;
-    switch (dir){
-      case 'p':
-        return 'p';
-      case 's':
-        new_state = joystickFlick.next_state('b');
-        break;
-      default:
-        new_state = joystickFlick.next_state(dir);
-        break;
-    }
-
-    if (new_state == JoystickFlick::ARMED)
-      return dir;
-    else 
-      return 'b';
-  }
 } sysState;
 
 QueueHandle_t msgInQ;
