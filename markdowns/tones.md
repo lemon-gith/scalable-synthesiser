@@ -1,36 +1,25 @@
 # Tones
 
-This feature allows the 
+This feature allows the timbre of the output signal to be changed by the user.
 
 ## Implementation & Usage
 
 ### Sawtooth
 
-oof
+From the labs, this uses a phase accumulator to accumulate an overflow-able count for each note, that increases linearly, before overflowing to become negative again (dropping back to its start).
 
 ### Square
 
-hmm
+This makes use of the phase accumulator, by thresholding it to either `127` or `-128`, depending on whether or not the `phase_out` value was above or below 0.
 
 ### Triangle
 
-aaaah
+This, too, makes use of the phase accumulator, by reflecting it in $y=0, \forall y > 0$, i.e. all positive values were multiplied by $-1$, before  
 
 ### Sine
 
-hehe
+Sine actually makes use of its own accumulators called `phase_counter`s, which count incrementally because these values act as indices: each counter is used to index
 
-Keeping track of which octave a key is in is done per synth, since each synth can only be in one octave at a time… and thus it’s stored in the `sysState` struct (as a volatile variable, since it’s read by many different tasks).
-
-It’s only written to via the UI, where there’s a menu item dedicated to changing octaves via the joystick. The `navigate` function grabs a local copy of the current octave (between `xSemaphoreGive/Take`), and modifies it according to the current menu (and joystick) activity, before then writing it back to `sysState`.
-
-The primary usage of octaves is in the note-playing functions, where it’s used to identify how to scale the frequencies:
-
-``uint32_t phaseInc = (oct < 4) ? 
-    (stepSizes[note] >> (4 - oct)) : 
-    (stepSizes[note] << (oct - 4));``
-
-In mathematical terms, going up and down octaves just consists of doubling or halving the frequencies of the corresponding notes, so in order to implement that, we take our 12-array of step sizes and use bitshifting (multiply by +/- power of 2) to apply the relevant scalings to the stepSize increment sizes, which scales the speed at which the amplitude increases and wraps around, which scales our frequency :)
 
 ## Notes
 

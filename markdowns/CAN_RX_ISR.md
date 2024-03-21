@@ -1,7 +1,8 @@
 # Task: Receiving CAN messages
 
 This task sets up new memory space for variables used by its callees, then calls CAN_RX, which loads a received message into RX_Message_ISR. It then stores this message into the program’s internal queue, to be handled by the decoder, later.
-## Task type and functions
+
+## Task type and execution time
 The task `CAN_RX_ISR` places received messages onto the msgInQ. The worst case then becomes when the queue is filling up. As the length of the queue is 36, and each CAN frame takes 0.7ms, the product of it, 25.2ms, creates the worst case execution time. The accumulated execution time then becomes 
 
 ```math
@@ -21,9 +22,3 @@ The task `CAN_RX_ISR` places received messages onto the msgInQ. The worst case t
 | Initiation Interval (ms) | Execution Time (ms) |
 | --- | --- |
 | - | 0.99333 |
-
-## Task interval and execution time
-
-## Data/resource use and synchronisation
-
-## Blocking dependencies and deadlock risk
