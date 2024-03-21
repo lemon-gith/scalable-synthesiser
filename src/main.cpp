@@ -338,7 +338,7 @@ void updateDisplayTask(void * pvParameters){
     // DISPLAY UPDATE
     u8g2.clearBuffer();  // clear internal write memory
     u8g2.setFont(u8g2_font_u8glib_4_tf);  // choose a suitable font
-    // Display last sent/received CAN message
+    
     
     //Initalise all the array
     char localKeyStrings[13] = {0};
@@ -357,6 +357,7 @@ void updateDisplayTask(void * pvParameters){
     
     uint8_t localOctave = sysState.octave; 
     char localSendState = sysState.TX_Message[0];
+    // Display last sent/received CAN message
     uint8_t localMetValue = sysState.met;
     bool metOnState = sysState.metOnState;
     uint8_t localMenuState = sysState.menuState;
@@ -567,22 +568,34 @@ int32_t playNotes(const uint32_t &tone, const uint32_t &vol){
   uint8_t localOctave = __atomic_load_n(&sysState.octave, __ATOMIC_RELAXED);
   int32_t noteV = 0;  // TODO: in case we want to try an intermediate operation
   int32_t Vout = 0;
-
+  
+  // just in case the code below doesn't work or is inefficient
+  /*bool local_keys_down[96] = {0};
+  for(int i = 0; i < 96; i++){
+    local_key_down[i] = 
+      __atomic_load_n(&sysState.keys_down[idx], __ATOMIC_RELAXED);
+  }*/
+  
   //Play local keys
   bool local_key_down;
-  int idx = (localOctave - 1) * 12;
-  for(int i = 0; i < 12; i++){
-    local_key_down = 
-      __atomic_load_n(&sysState.keys_down[idx++], __ATOMIC_RELAXED);
-    if(local_key_down){
-      noteV = playFunction(tone, localOctave, i, idx);
-      Vout += noteV;
+  uint8_t octave = 0, note = 0;
+  for(int idx = 0; idx < 96; idx++){
+    if(note > 11){
+      octave++;
+      note = 0;
     }
+    local_key_down = 
+      __atomic_load_n(&sysState.keys_down[idx], __ATOMIC_RELAXED);
+    if(local_key_down){
+        noteV = playFunction(tone, octave+1, note, idx);
+        Vout += noteV;
+    }
+    note++;
   }
 
   // Play metronome
   static int metronomeCounter = 0;
-  if (__atomic_load_n(&sysState.metOnState, __ATOMIC_RELAXED)){ // TODO: should these be atomic?
+  if (__atomic_load_n(&sysState.metOnState, __ATOMIC_RELAXED)){
     int metSamplePeriod = (sampleFreq*60)/(__atomic_load_n(&sysState.met, __ATOMIC_RELAXED));
     if (metronomeCounter <= 0){
       metronomeCounter = metSamplePeriod;
@@ -615,7 +628,7 @@ void sampleISR() {
 
     // stores transmitted data into sysState
     if (localRX_Info[0] == 'P'){
-      int note_index = localRX_Info[1]*12 + localRX_Info[2];
+      int note_index = (localRX_Info[1]-1)*12 + localRX_Info[2];
       __atomic_store_n(&sysState.keys_down[note_index], 1, __ATOMIC_RELAXED);
     }
     // TODO: ^ should this be a for loop or sth?
