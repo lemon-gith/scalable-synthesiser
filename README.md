@@ -46,7 +46,4 @@ Group Peaky Blinders’ report for the ES_synth project.
 \le
 ```
 
-## List of resources and allocation
-
-
 ## Dependency diagram
