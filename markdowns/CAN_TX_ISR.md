@@ -16,6 +16,10 @@ The frequency of this interrupts execution is dependent on `CAN_TX_TASK`, as eac
 0.0026667 \times 39 = 104 \micro s
 ```
 
+|Initiation Interval (ms)	|Execution Time (ms)|
+| - | 0.009875 |
+	
+
 ## Data/resource use and synchronisation
 
 This tasks does not use any data/resources. It manages synchronisation by releasing a count of CAN_TX_Semaphore every time it runs.
