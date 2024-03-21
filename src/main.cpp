@@ -583,7 +583,7 @@ int32_t playNotes(const uint32_t &tone, const uint32_t &vol){
   // Play metronome
   static int metronomeCounter = 0;
   if (__atomic_load_n(&sysState.metOnState, __ATOMIC_RELAXED)){ // TODO: should these be atomic?
-    int metSamplePeriod = (sampleFreq*60)/(sysState.met);
+    int metSamplePeriod = (sampleFreq*60)/(__atomic_load_n(&sysState.met, __ATOMIC_RELAXED));
     if (metronomeCounter <= 0){
       metronomeCounter = metSamplePeriod;
     }
