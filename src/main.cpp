@@ -132,12 +132,12 @@ void navigate(char direction){
 
         if(direction == 'u'){
           octave++;
-          if (octave == 8)
+          if (octave > 8)
             octave = 1;  // TODO: remove ugly-sounding octaves (e.g. 1, 8)
         }
         else if(direction == 'd'){
           octave--;
-          if(octave == 1)
+          if(octave < 1)
             octave = 8;
         }
         prev_direction = direction;
@@ -341,6 +341,7 @@ void updateDisplayTask(void * pvParameters){
     u8g2.setFont(u8g2_font_u8glib_4_tf);  // choose a suitable font
     
     
+    // make new declaration before taking mutex
     //Initalise all the array
     char localKeyStrings[13] = {0};
     localKeyStrings[12] = '\0';  // 12 keys + null terminator
@@ -355,7 +356,6 @@ void updateDisplayTask(void * pvParameters){
       localKeyStrings[i] = 
         __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
     }
-    uint8_t localDotLoc[2] = {0};
     uint8_t localOctave = sysState.octave;
     // Display last sent/received CAN message
     char localSendState = sysState.TX_Message[0];
@@ -498,7 +498,7 @@ int32_t playSampled(uint32_t tone, uint8_t oct, uint8_t note, int idx){
       int noteShift = note - 9;
       float noteShiftPow = noteMultiplierNumerator/noteMultiplierDenominator;
       for (int i = 0; i < abs(noteShift); i++){
-        noteShiftPow = (noteShift > 0) ?  // TODO: can I rewrite a little?
+        noteShiftPow = (noteShift > 0) ?
           (noteShiftPow * noteMultiplierNumerator)/noteMultiplierDenominator :
           (noteShiftPow * noteMultiplierDenominator)/noteMultiplierNumerator;
       }
@@ -528,26 +528,26 @@ int32_t playSampled(uint32_t tone, uint8_t oct, uint8_t note, int idx){
 }
 
 int32_t playFunction(uint32_t tone, uint8_t oct, uint8_t note, int idx){
-  static int32_t phase_accumulators[96] = {0};
+  static uint32_t phase_accumulators[96] = {0};
 
-  uint32_t phaseInc = (oct < 4) ? 
+  uint32_t phase_inc = (oct < 4) ? 
     (stepSizes[note] >> (4 - oct)) : 
     (stepSizes[note] << (oct - 4));
   
-  phase_accumulators[idx] += phaseInc;
+  phase_accumulators[idx] += phase_inc;
 
-  //Scale to -128 <= phaseOut <= 127
-  int32_t phaseOut = (phase_accumulators[idx] >> 24) - 128;
+  //Scale to -128 <= phase_out <= 127
+  int32_t phase_out = (phase_accumulators[idx] >> 24) - 128;
   // FUNCTION WAVES (based on stepSizes values)
   switch (tone){
     case 0:  // SAWTOOTH
-      return phaseOut;
+      return phase_out;
     case 1:  // SQUARE
-      return (phaseOut < 0) ? -128 : 127;  // thresholding phase_accumulator
+      return (phase_out < 0) ? -128 : 127;  // thresholding phase_accumulator
     case 2:  // TRIANGLE
-      if (phaseOut > 0)
-        phaseOut = -phaseOut;
-      return (phaseOut + 64) << 2;
+      if (phase_out > 0)
+        phase_out = -phase_out;
+      return (phase_out + 64) << 2;
     case 3:
       return playSampled(3, oct, note, idx); // SINE
     default:  // shouldn't happen
@@ -567,11 +567,12 @@ int32_t inline jack_the_clipper(int32_t Vout, const uint32_t &vol){
 }
  
 int32_t playNotes(const uint32_t &tone, const uint32_t &vol){
-  uint8_t localOctave = __atomic_load_n(&sysState.octave, __ATOMIC_RELAXED);
   int32_t noteV = 0;  // TODO: in case we want to try an intermediate operation
   int32_t Vout = 0;
   
-  // just in case the code below doesn't work or is inefficient
+  // TODO: would it be better to do them all in one go, or one-by-one?
+  // my thoughts is that it's actually better to give other threads an
+  // opportunity to access keys_down between accesses here?
   /*bool local_keys_down[96] = {0};
   for(int i = 0; i < 96; i++){
     local_key_down[i] = 

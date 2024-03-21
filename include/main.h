@@ -45,7 +45,6 @@ struct {
   volatile bool knobPushes[4] = {0};  // VOL TONE SETTING ECHO
   
   volatile uint8_t octave = 4;
-  volatile int32_t phase_accumulators[96] = {0};
   volatile bool keys_down[96] = {0};
 
   volatile short joystick_pos[2] = {0};
