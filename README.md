@@ -7,6 +7,8 @@ Group Peaky Blinders’ report for the ES_synth project.
 - [decodeMessage Task](https://github.com/MITeo21/ES-synth/tree/master/markdowns/decodeMessage.md)
 - [CAN_TX_TASK](https://github.com/MITeo21/ES-synth/blob/master/markdowns/CAN_TX_TASK.md)
 - [CAN_TX_ISR](https://github.com/MITeo21/ES-synth/blob/master/markdowns/CAN_TX_ISR.md)
+- [CAN_RX_ISR](https://github.com/MITeo21/ES-synth/tree/master/markdowns)
+- [sampleISR](https://github.com/MITeo21/ES-synth/blob/master/markdowns/sampleISR.md)
 
 
 ## Advanced features implemented
