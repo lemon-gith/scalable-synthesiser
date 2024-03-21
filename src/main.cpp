@@ -58,24 +58,32 @@ std::bitset<12> readKnobs(){
 }
 
 char calcJoy(short x, short y, short p){ 
+  // TODO: adjust x and y to be centered around 0
+  char dir;
   if(p == 1){  // i.e. if joystick state is ARMED
-    return 'p';
+    dir = 'p';
   }
   else if(x < 300 &&  (y < 600 && y > 200)){
-    return 'r';
+    dir = 'r';
   }
   else if (x > 700 && (y < 600 && y > 200)){
-    return 'l';
+    dir = 'l';
   }
   else if ((x < 600 && x > 200) && y < 200){
-    return 'u';
+    dir = 'u';
   }
   else if ((x < 600 && x > 200) && y > 700){
-    return 'd';
+    dir = 'd';
   }
   else{
-    return 's';
+    dir = 's';
   }
+
+  xSemaphoreTake(sysState.mutex, portMAX_DELAY);
+  dir = sysState.next_state(dir);
+  xSemaphoreGive(sysState.mutex);
+
+  return dir;
 }
 
 void navigate(char direction){

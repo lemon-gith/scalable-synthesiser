@@ -40,8 +40,13 @@ struct ButtonPress {
 
 // a state machine for joystick flick toggling
 struct JoystickFlick {
+  // reduced for use
+  char direction;  // only b, u, d, l, r, are valid
+  
   // base, up-right, right-up, right-down, etc.
-  enum Direction{B, UR, RU, RD, DR, DL, LD, LU, UL} direction;
+  // enum Direction{B, UR, RU, RD, DR, DL, LD, LU, UL} direction;
+  // TODO: ^ rewrite to give easy, numerical UD and LR splits
+  
   // OFF for B, else ARMED for change, ON for no change
   enum State{OFF, ARMED, ON} state;
   // enumerates 5 possible joystick direction configs
@@ -49,41 +54,96 @@ struct JoystickFlick {
 
   // constructs a button state machine, given a name, starts OFF
   JoystickFlick(){
-    this->direction = B;
-    this->state = OFF;
+    direction = 'b';
+    state = OFF;
+  }
+
+  void toDirection(char dir){
+    direction = dir;
   }
 
   // TODO: write this better, this seems table-like, think abt that
+  // maybe use different encoding for directions, two chars?
   
-  // TODO: write a good description
+  /* currently deprecated for simpler implementation
+  // given the current direction and current joystick config mode
+  // will determine and return the next state
   State nextState(Direction dir, Config config){
-    if(dir == B){  // if not pressed, it's off...
+    if(dir == B){  // if at Base, do nothing
       direction = B;
       return state = OFF;
     }
+    else if((direction == B) && (dir != B)){
+      direction = dir;
+      return state = ARMED;
+    }  // early returns for readability
     else switch(config){
       case UD:
-        if ((dir < RD || dir > LD)
-        && (this->direction < RD || this->direction > LD))
-          return this->state = ARMED;
-        else
-          return this->state = ON;
-      if (dir != this->direction){
-        this->direction = dir;
-        return this->state = ARMED;
-      }
-      else  // if pressed and was already pressed, it is ON
-        return this->state = ON;
+        // NOT IMPLEMENTED
+        break;
+      case LR:
+        // NOT IMPLEMENTED
+        break;
+      case UDLR:
+        switch (dir){
+          case UR: case UL:  // either of these (fall-through)
+            if ((direction == UR) || (direction == UL))
+              state = ON;
+            else
+              state = ARMED;
+            break;
+          case RU: case RD:
+            if ((direction == RU) || (direction == RD))
+              state = ON;
+            else
+              state = ARMED;
+            break;
+          case DR: case DL:
+            if ((direction == DR) || (direction == DL))
+              state = ON;
+            else
+              state = ARMED;
+            break;
+          case LD: case LU:
+            if ((direction == LD) || (direction == LU))
+              state = ON;
+            else
+              state = ARMED;
+            break;
+          default:
+            return state = OFF;
+        }
+        break;
+      case D8:
+        // NOT IMPLEMENTED
+        break;
+      case D16:
+        // NOT IMPLEMENTED
+        break;
+    }
+    direction = dir;
+    return state;
   }
-  }
+  */
+  
+  State next_state(char dir){
+    if(dir == 'b')
+      state = OFF;  // if at Base, do nothing
+    else if(direction != dir)
+      state = ARMED;
+    else
+      state = ON;
 
+    direction = dir;  // cast to enum
+    return state;
+  }
   // just returns the current state, nothing else
   State getState(){
     return state;
   }
 
   // just returns the current direction, nothing else
-  Direction getDirection(){
+  char getDirection(){
     return direction;
   }
 };
