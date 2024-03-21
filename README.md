@@ -54,7 +54,8 @@ $$
 + \lceil \dfrac{}{} \rceil * 0.0026667
 + \lceil \dfrac{}{} \rceil * 0.99333
 + \lceil \dfrac{}{0.0455} \rceil * 0.00155
-\le $$
+\le
+$$
 
 - Meigan: Make diagram for timing analysis
 
