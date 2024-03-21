@@ -6,6 +6,7 @@ The task `CAN_RX_ISR` places received messages onto the msgInQ. The worst case t
 
 ```math
 36 \times 0.99333 = 35.76 ms
+```
 
 ## Measurement methodology
 
