@@ -11,6 +11,9 @@ This task calls the following functions:
 - xQueueReceive: copies a message from the receiving queue into a buffer
 
 ## Task interval and execution time
+Similar to the CAN_TX_TASK, the initiation interval for the `decodeMessageTask` was found by examining how long it waits for the messages from `msgInQ` so that it does not fill up. As the task's function is to remove the messages from the queue by transmitting them via the CAN protocol, the interval can be found by seeing the duration of each CAN frame transmission, multiplied by the length of the queue. Each CAN frame takes 0.7ms to execute, and the length of the queue is 36, which gives 25.2ms required to empty. For the accumulated execution time, it can be calculated by 
+```math
+0.009875 \time 36 = 355.5 \micro s
 
 ## Data/resource use and synchronisation
 
