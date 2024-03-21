@@ -14,6 +14,13 @@ This task calls the following functions:
 ## Task interval and execution time
 For the initiation interval, the frequency of initiation that prevents `msgOutQ` from filling up was required. `msgOutQ` is pushed by `updateKeysTask` which has an interval of 20ms and generation of 12 messages per interval at the worst case. As the queue is 36 items long, only 3 iterations of `updateKeysTask` are required to fill it up, which gives
 
+## Measurement Methodology
+
+1. Disabled all other thread tasks and ISRs through preprocessor directives to isolate the `CAN_TX_Task`.
+2. Configured a loop at the end of the `setup` function to execute the task 3 times.
+3. Increased the size of `msgOutQ` to 1000 to prevent the task from blocking.
+4. Limited the execution loop to 3 iterations in alignment with the CAN hardware’s three mailbox slots, to prevent blocking due to the semaphore limit.
+
 ```math
 3 \times 20ms = 60ms
 ```
