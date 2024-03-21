@@ -18,7 +18,7 @@ Group Peaky Blinders’ report for the ES_synth project.
 - [Polyphony](https://github.com/MITeo21/ES-synth/blob/master/markdowns/polyphony.md)
 - [Tones](https://github.com/MITeo21/ES-synth/blob/master/markdowns/tones.md)
 - [Metronome](https://github.com/MITeo21/ES-synth/blob/master/markdowns/Metronome.md)
-- [Video]()
+- [Video](https://www.youtube.com/watch?v=aVbcZlZeOfQ&feature=youtu.be)
 
 ## Task categorisations and characterisations
 
