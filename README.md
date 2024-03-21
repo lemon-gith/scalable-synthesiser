@@ -13,27 +13,11 @@ Group Peaky Blinders’ report for the ES_synth project.
 
 ## Advanced features implemented
 
--[Octaves](https://github.com/MITeo21/ES-synth/blob/master/markdowns/octaves.md)
-### Octaves
-
-- Explain maths (briefly!)
-
-### UI
-
-- Put a picture here of different states
-
-### Polyphony
-
-- Explain static array
-
-### Tones
-
-- Saw wave transformations
-    - aka, playFunction
-- Sampled tones
-    - aka, playSampled
-
-### Metronome
+- [Octaves](https://github.com/MITeo21/ES-synth/blob/master/markdowns/octaves.md)
+- [UI](https://github.com/MITeo21/ES-synth/blob/master/markdowns/UI.md)
+- [Polyphony](https://github.com/MITeo21/ES-synth/blob/master/markdowns/polyphony.md)
+- [Tones](https://github.com/MITeo21/ES-synth/blob/master/markdowns/tones.md)
+- [Metronome](https://github.com/MITeo21/ES-synth/blob/master/markdowns/Metronome.md)
 
 ## Task categorisations and characterisations
 
