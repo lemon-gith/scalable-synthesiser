@@ -1,5 +1,3 @@
-CAN_TX_ISR
-
 # Task: CAN_TX_ISR
 
 Gives the semaphore to signal when a new transmission can be sent, based on mailbox status.
