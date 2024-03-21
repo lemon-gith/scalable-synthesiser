@@ -46,6 +46,7 @@ Group Peaky Blinders’ report for the ES_synth project.
     - Meigan: check and jump in if necessary
 - Yomna: critical instance analysis maths
 
+$'
 \lceil \dfrac{}{25.2} \rceil * 0.53425
 + \lceil \dfrac{}{100} \rceil * 16.778
 + \lceil \dfrac{}{} \rceil * 0.009875
@@ -53,7 +54,7 @@ Group Peaky Blinders’ report for the ES_synth project.
 + \lceil \dfrac{}{} \rceil * 0.0026667
 + \lceil \dfrac{}{} \rceil * 0.99333
 + \lceil \dfrac{}{0.0455} \rceil * 0.00155
-\le
+\le '$
 
 - Meigan: Make diagram for timing analysis
 
