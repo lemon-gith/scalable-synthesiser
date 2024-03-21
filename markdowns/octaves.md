@@ -10,7 +10,7 @@ The variable is only written to via the UI, controlled by a menu item dedicated 
 
 The primary usage of octaves is in the note-playing functions, where it’s used to identify how to scale the frequencies:
 
-math```
+```
   uint32_t phase_inc = (oct < 4) ? 
     (stepSizes[note] >> (4 - oct)) : 
     (stepSizes[note] << (oct - 4));```
