@@ -2,9 +2,9 @@
 
 Group Peaky Blinders’ report for the ES_synth project.
 ## Table of Contents
-- [updateKeys Task](https://github.com/MITeo21/ES-synth/blob/master/markdowns/updateKeys)
+- [updateKeys Task](https://github.com/MITeo21/ES-synth/blob/master/markdowns/updateKeys.md)
 - [updateDisplay Task](https://github.com/MITeo21/ES-synth/blob/master/markdowns/updateKeys.md)
-- [decodeMessage Task](https://github.com/MITeo21/ES-synth/tree/master/markdowns)
+- [decodeMessage Task](https://github.com/MITeo21/ES-synth/tree/master/markdowns/decodeMessage.md)
 
 
 ## Advanced features implemented
