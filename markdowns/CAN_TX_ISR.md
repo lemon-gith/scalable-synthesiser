@@ -13,6 +13,17 @@ The frequency of this interrupts execution is dependent on `CAN_TX_TASK`, as eac
 ```math
 0.0026667 \times 39 = 104 \micro s
 ```
+
+##Measuring Methodology
+
+1. Initial Setup:
+    1. Disabled all other thread tasks and ISRs through preprocessor directives to isolate the `CAN_TX_ISR` function.
+    2. Increased the size of `msgOutQ` to 1000 to prevent the task from blocking.
+    3. Configured a loop at the end of the `setup` function to execute the task 3 times.
+    4. Limited the execution loop to 3 iterations in alignment with the CAN hardware’s three mailbox slots, to prevent blocking due to the semaphore limit.
+2. Function configuration
+    1. Adjusted the semaphore operations to use `xSemaphoreGive` suited for non-ISR contexts, to setup the function for testing
+  
 | Initiation Interval (ms) | Execution Time (ms) |
 | --- | --- |
 | - | 0.0026667 |
