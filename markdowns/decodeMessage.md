@@ -16,6 +16,14 @@ Similar to the CAN_TX_TASK, the initiation interval for the `decodeMessageTask` 
 0.009875 \times 36 = 355.5 \micro s
 ```
 
+## Mesurement Methodology
+1. Initial Setup:
+    1. Disable all other thread tasks and ISRs through preprocessor directives to isolate the `decodeMessageTask`.
+    2. Increased the size of `msgOutQ` to 1000 to prevent the task from blocking.
+    3. Configured a loop at the end of the `setup` function to execute the task 32 times for averaging the execution time.
+2. Worst-case configuration
+    1. Pre-filled the `msgInQ` queue before executing the loop to ensure `decodeMessageTask` could execute without being blocked by `xQueueReceive`.
+
 | Initiation Interval (ms) | Execution Time (ms) |
 | --- | --- |
 | - | 0.009875 |
