@@ -36,14 +36,14 @@ Group Peaky Blinders’ report for the ES_synth project.
 
 
 ```math
-\lceil \dfrac{}{25.2} \rceil * 0.53425
-+ \lceil \dfrac{}{100} \rceil * 16.778
-+ \lceil \dfrac{}{} \rceil * 0.009875
-+ \lceil \dfrac{}{} \rceil * 0.01
-+ \lceil \dfrac{}{} \rceil * 0.0026667
-+ \lceil \dfrac{}{} \rceil * 0.99333
-+ \lceil \dfrac{}{0.0455} \rceil * 0.00155
-\le
+\lceil \dfrac{100}{25.2} \rceil * 0.53425
++ \lceil \dfrac{100}{100} \rceil * 16.778
++ \lceil \dfrac{100}{25.2} \rceil * 0.3555
++ \lceil \dfrac{100}{60} \rceil * 0.36
++ \lceil \dfrac{100}{60} \rceil * 0.104
++ \lceil \dfrac{100}{25.2} \rceil * 35.76
++ \lceil \dfrac{100}{0.0455} \rceil * 0.00155
+\le 100
 ```
 
 ## Dependency diagram
