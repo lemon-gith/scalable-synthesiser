@@ -12,6 +12,12 @@ This task calls the following functions:
 - CAN_TX: Sends a 32 bit message on the CAN bus
 
 ## Task interval and execution time
+For the initiation interval, the frequency of initiation that prevents `msgOutQ` from filling up was required. `msgOutQ` is pushed by `updateKeysTask` which has an interval of 20ms and generation of 12 messages per interval at the worst case. As the queue is 36 items long, only 3 iterations of `updateKeysTask` are required to fill it up, which gives
+
+```math
+3 \times 20ms = 60ms
+```
+Therefore, in order to empty `msgOutQ`, 36 items need to be removed every 60ms, which is the initation interval.
 
 
 ## Data/resource use and synchronisation
