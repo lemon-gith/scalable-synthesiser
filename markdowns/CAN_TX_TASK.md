@@ -19,6 +19,10 @@ For the initiation interval, the frequency of initiation that prevents `msgOutQ`
 ```
 Therefore, in order to empty `msgOutQ`, 36 items need to be removed every 60ms, which is the initation interval.
 
+| Initiation Interval (ms) | Execution Time (ms) |
+| --- | --- |
+| - | 0.01 |
+
 
 ## Data/resource use and synchronisation
 
