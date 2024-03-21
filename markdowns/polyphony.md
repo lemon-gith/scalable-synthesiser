@@ -1,7 +1,7 @@
 # Polyphony
 
-This is a very nice-to-have feature that allows more than one note to played at a time (since, before, multiple notes would result in screeching…), also *chords* :D 
-This feature required a change in the way that notes were handled, since one, general accumulator would just accumulate the steps of every note into it, which was causing the frequency-addition (high-pitch), and adding the `Vout`s from all the notes (which was essentially `n + (n + 1) + …`) caused amplitude accumulation to occur, resulting in the high-pitch, loud screech.
+This feature allows more than one note to be played, audibly, at a time (since, before, multiple notes would result in screeching…), as well as now being able to play chords.
+This feature required a change in the way that notes were handled, since one, general accumulator would just accumulate the steps of every note into it, which was causing the frequency-addition (high-pitch), and adding the Vouts from all the notes (which was essentially n + (n + 1) + …) caused amplitude accumulation to occur, resulting in the high-pitch, loud screech.
 
 ## Implementation & Usage
 
