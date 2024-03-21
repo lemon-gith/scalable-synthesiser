@@ -14,6 +14,10 @@ The frequency for this interrupt is constant at 22kHz. This frequency is set so 
 
 - Calculating the execution time
     - Explain measurement method
+ 
+| Initiation Interval (ms) | Execution Time (ms) |
+| --- | --- |
+| - | 0.0455 |
 
 ## Data/resource use and synchronisation
 
