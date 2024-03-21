@@ -18,11 +18,8 @@ This, too, makes use of the phase accumulator, by reflecting it in $y=0, \forall
 
 ### Sine
 
-Sine actually makes use of its own accumulators called `phase_counter`s, which count incrementally because these values act as indices: each counter is used to index
+Sine actually makes use of its own accumulators called `phase_counter`s, which count incrementally because these values act as indices: each counter is modified via some calculations and used to index the large, pre-computed sine-value table, which is reduced to the desired range and the `Vout` value is then accumulated by `playNotes`, just as with the other tones.
 
+## Volume
 
-## Notes
-
-After implementing polyphony, octaves have become somewhat of a computed attribute of the key index (used in `keys_down` and other similar arrays), along with `note`. But, it makes local-note computation quicker and the code more readable to not have to keep calculating it, so whether it’s computed once or taken from `sysState`, it’s still preferable to have a local `octave` value for use.
-
-One downside of keeping it in `sysState` is that taking the mutex to copy the value of `octave` now blocks other operations, but it’s still important for the UI and for local key presses to know which octave the synth is currently on, so it’s still necessary to keep around in the global struct.
+One interesting note is the perceived volumes of each of the waveforms: sawtooth and square seemed louder than triangle or sine at the same volume. I think this is because our easier are sensitive to frequency and higher frequencies at the same volume tend to sound a bit louder. Because sawtooth and square have abrupt waveform changes, i.e. very high frequency changes, they sound a lot louder to us; the triangle waves changes are not as drastic, so it sounds a little quieter, and because the sine wave is very smooth, it sounds the quietest to us, despite being at the same volume as the others.
