@@ -340,16 +340,21 @@ void updateDisplayTask(void * pvParameters){
     u8g2.setFont(u8g2_font_u8glib_4_tf);  // choose a suitable font
     // Display last sent/received CAN message
     
+    //Initalise all the array
+    char localKeyStrings[13] = {0};
+    localKeyStrings[12] = '\0';  // 12 keys + null terminator
+    uint8_t localDotLoc[2] = {0};
+
     // Take all the necessary variables
     xSemaphoreTake(sysState.mutex, portMAX_DELAY); 
     // holds local keypress info
-    char localKeyStrings[13] = {0};
-    localKeyStrings[12] = '\0';  // 12 keys + null terminator
+    
+    
     for (int i = 0; i < 12; i++){
       localKeyStrings[i] = 
         __atomic_load_n(&sysState.keyStrings[i], __ATOMIC_RELAXED);
     }
-    uint8_t localDotLoc[2] = {0};
+    
     uint8_t localOctave = sysState.octave; 
     char localSendState = sysState.TX_Message[0];
     uint8_t localMetValue = sysState.met;
@@ -577,7 +582,7 @@ int32_t playNotes(const uint32_t &tone, const uint32_t &vol){
 
   // Play metronome
   static int metronomeCounter = 0;
-  if (sysState.metOnState){ // TODO: should these be atomic?
+  if (__atomic_load_n(&sysState.metOnState, __ATOMIC_RELAXED)){ // TODO: should these be atomic?
     int metSamplePeriod = (sampleFreq*60)/(sysState.met);
     if (metronomeCounter <= 0){
       metronomeCounter = metSamplePeriod;
@@ -602,7 +607,7 @@ void sampleISR() {
   if (!sysState.isSender){  //Only receivers output sound
     const uint32_t localVolume = __atomic_load_n(&sysState.knobValues[0], __ATOMIC_RELAXED);
     const uint32_t localTone = __atomic_load_n(&sysState.knobValues[1], __ATOMIC_RELAXED);
-
+    
     uint8_t localRX_Info[3];
     for (int i = 0; i < 3; i++)
       localRX_Info[i] = 
