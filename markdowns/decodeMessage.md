@@ -16,6 +16,10 @@ Similar to the CAN_TX_TASK, the initiation interval for the `decodeMessageTask` 
 0.009875 \times 36 = 355.5 \micro s
 ```
 
+| Initiation Interval (ms) | Execution Time (ms) |
+| --- | --- |
+| - | 0.009875 |
+
 ## Data/resource use and synchronisation
 
 This task uses the resource msgInQ, which is the queue of all received messages. The synchronisation of this queue is managed by FreeRTOS.
