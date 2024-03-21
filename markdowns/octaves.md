@@ -10,10 +10,11 @@ The variable is only written to via the UI, controlled by a menu item dedicated 
 
 The primary usage of octaves is in the note-playing functions, where it’s used to identify how to scale the frequencies:
 
-``
+```cpp
   uint32_t phase_inc = (oct < 4) ? 
     (stepSizes[note] >> (4 - oct)) : 
-    (stepSizes[note] << (oct - 4));``
+    (stepSizes[note] << (oct - 4));
+```
 
 In mathematical terms, moving up and down octaves consists of doubling or halving the frequencies of the corresponding notes. In order to implement this, the constant array of the 12 step sizes is bitshifted (multiply by +/- power of 2, which is a very efficient operation for the CPU) to apply the relevant scalings to the stepSize increment sizes. This scales the speed at which the amplitude increases and wraps around, which scales the frequency.
 

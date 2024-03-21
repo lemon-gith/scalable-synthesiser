@@ -1,4 +1,6 @@
-This was to make life easier for us while developing the features, the fact that it’s also nice for users, well, that’s a bonus. It’s mainly just having set up the display to show multiple frames displaying information from the notes currently being played, the current volume, tone, octave, etc., to providing a menu for users to be able to change modes and modify features like the octave, metronome (bpm and switch), and playback. 
+# UI
+
+This feature provides a user-friendly experience to display useful information for users and to allow them to easily toggle device configurations. The display primarily shows a few frames displaying information, such as the notes currently being played, the current volume, tone, octave, etc., to providing a menu for users to be able to change modes and modify features like the octave, metronome (bpm and switch), and playback.
 
 ## Usage
 
@@ -8,7 +10,7 @@ This task sets the display to update at 10Hz, using `vTaskDelayUntil` to keep tr
 
 As mentioned above, the `drawFrame` function is used to put frames around the elements we want framed, then the `drawCursor` function is used to put a little cursor on the currently selected menu item. If the cursor is `-` it’s just hovering, but if the joystick button is pressed it toggles the cursor between hovering and `>` (active). The cursor moves according to the shape of the menu, not the shape of the array, so moving it down from Metronome, would bring it down to Playback, and left from there would bring it to Octave, and vice versa—invalid movements are ignored for usability.
 
-The cursor is the primary form of interaction, purely between the user and the menu, everything else primarily affects a feature of the synth, such as the volume selection modifying how much the output amplitude is attenuated, or the metronome’s bpm affecting the frequency of the metronome’s blips. These configurations are just selected via the menu.
+The cursor is the primary form of interaction, purely between the user and the menu, everything else primarily affects a feature of the synth, such as the volume selection modifying how much the output amplitude is attenuated, or the metronome’s bpm affecting the frequency of the metronome’s blips. These configurations are selected via the menu.
 
 ## Implementation
 
@@ -28,4 +30,7 @@ It was implemented like this, because the extra overhead of a state machine is m
 - metronome’s bpm doesn’t store anything, since it should move quickly through it’s values
 - menu-item selection should *also* be handled by its own logic, due to its different use-case
 
-3. The joystick’s direction was read by taking the analogRead value of the joystick’s x and y axis, which were then put under different if statements to correspond to a direction. These values were checked if they were over or under certain values which would crate a region of different direction, such that the user does not always have to go to the extremities to choose. Moreover, each joystick use does not always account to the same value, hence creating a region allowed for more robustness. On the other hand, there is also a ‘dead-zone’ on the joystick, where there is no direction associated to it, so that the slightest movement of the joystick wouldn’t lead to a change in any state of the menu.
+3. The joystick’s direction was read by taking the `analogRead` value of the joystick’s x and y axis, which were then put through different if conditions to yield a direction. It checked if these values were over or under certain boundaries which would create regions, defining different directions, to increase the vaild region available to the user. 
+Moreover, because a user may not push the joystick perfectly to the ‘up’ direction, for example, these regions afford the user more robustness in how much of the joystick zone accounts for each direction region. On the other hand, there is also a ‘dead-zone’ or ‘base’ zone on the joystick, to which there is no direction associated, allowing the system to ignore slight bumps to the joystick.
+
+TODO: Link & Embed images/videos when adding it to the github, using `![]()` syntax
