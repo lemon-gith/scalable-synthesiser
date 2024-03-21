@@ -17,7 +17,7 @@ The frequency of this interrupts execution is dependent on `CAN_TX_TASK`, as eac
 ```
 | Initiation Interval (ms) | Execution Time (ms) |
 | --- | --- |
-| - | 0.009875 |
+| - | 0.0026667 |
 	
 
 ## Data/resource use and synchronisation
