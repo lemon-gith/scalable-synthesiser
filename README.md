@@ -41,7 +41,7 @@ Group Peaky Blinders’ report for the ES_synth project.
 + \lceil \dfrac{100}{25.2} \rceil * 0.3555
 + \lceil \dfrac{100}{60} \rceil * 0.36
 + \lceil \dfrac{100}{60} \rceil * 0.104
-+ \lceil \dfrac{100}{25.2} \rceil * 35.76
++ \lceil \dfrac{100}{25.2} \rceil * 0.99333
 + \lceil \dfrac{100}{0.0455} \rceil * 0.00155
 \le 100
 ```
