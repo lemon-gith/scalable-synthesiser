@@ -14,7 +14,7 @@ There are no other functions allocated to this task apart from releasing one cou
 The frequency of this interrupts execution is dependent on `CAN_TX_TASK`, as each execution of `CAN_TX_TASK` will execute this ISR. As shown in [CAN_TX_TASK](https://github.com/MITeo21/ES-synth/blob/master/markdowns/CAN_TX_TASK.md), the worst case execution time is 36 iterations every 60ms, and so will be the same for this. In the worst case, 3 CAN mailboxes are used, which are also full at the start of critical instant, which is added and gives the worst case execution time of 39 itrations per 60ms. The accumulated execution time is
 ```math
 0.0026667 \times 39 = 104 \micro s
-
+```
 
 ## Data/resource use and synchronisation
 
