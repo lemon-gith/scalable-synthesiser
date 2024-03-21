@@ -13,7 +13,7 @@ Group Peaky Blinders’ report for the ES_synth project.
 
 ## Advanced features implemented
 
-https://github.com/MITeo21/ES-synth/blob/master/markdowns/octaves.md
+-[Octaves](https://github.com/MITeo21/ES-synth/blob/master/markdowns/octaves.md)
 ### Octaves
 
 - Explain maths (briefly!)
