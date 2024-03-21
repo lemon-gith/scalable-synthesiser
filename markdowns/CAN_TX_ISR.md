@@ -15,8 +15,8 @@ The frequency of this interrupts execution is dependent on `CAN_TX_TASK`, as eac
 ```math
 0.0026667 \times 39 = 104 \micro s
 ```
-
-|Initiation Interval (ms)	|Execution Time (ms)|
+| Initiation Interval (ms) | Execution Time (ms) |
+| --- | --- |
 | - | 0.009875 |
 	
 
