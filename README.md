@@ -37,7 +37,7 @@ Group Peaky Blinders’ report for the ES_synth project.
 | decodeMessage | Loads oldest message in received queue into system state variable | thread |  | 0.009875 (316 us for 32) note: we had to fill up the msgin queue to be able to run the function otherwise the queuereceive blocked the function |
 | CAN_TX_Task | Transmits oldest message in transmitting queue over CAN bus | thread |  | 0.01 (30 us for 3) - ran the test 3 times |
 | CAN_TX_ISR | Gives the semaphore to signal when a new transmission can be sent | interrupt |  | 0.0026667 (8 us for 3) - had to change the give from ISR to just give - ran the test for 3 times |
-| CAN_RX_ISR | Places a received message onto the received queue | interrupt |  | 0.99333 (2980 us for 3) - had to set loopback to true - to make 3 calls of CAN_TX to fill up the mailbox - had to change the queuesendfromISR to just queuesend - ran the test for 3 times |
+| CAN_RX_ISR | Places a received message onto the received queue | interrupt |  | 0.99333 (2980 us for 3) {- had to set loopback to true - to make 3 calls of CAN_TX to fill up the mailbox - had to change the queuesendfromISR to just queuesend - ran the test for 3 times} |
 | sampleISR | Based on the current system state (notes pressed, octave, tone, etc) output value to speaker | interrupt | 0.0455 | 0.0155 (496 us for 32) |
 
 ## Critical instance analysis
