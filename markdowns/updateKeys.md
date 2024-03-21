@@ -31,6 +31,12 @@ To accurately characterise the `updateKeys` task, we implemented a series of ste
 4. Increased the size of `msgOutQ` to 384 to prevent the task from blocking due to a full queue, enabling it run an iteration of 12 key presses.
 5. Measured the execution time over 32 iterations using the `micros()` function.
 
+## Measurement Methodology
+
+1. Disabled all other thread tasks and ISRs through preprocessor directives to isolate the `CAN_TX_Task`.
+2. Configured a loop at the end of the `setup` function to execute the task 3 times.
+3. Limited the execution loop to 3 iterations in alignment with the CAN hardware’s three mailbox slots, to prevent blocking due to the semaphore limit.
+
 | Initiation Interval (ms) | Execution Time (ms) |
 | --- | --- |
 | 25.200 | 0.53426 |
