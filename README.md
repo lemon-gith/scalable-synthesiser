@@ -33,9 +33,6 @@ Group Peaky Blinders’ report for the ES_synth project.
 
 ## Critical instance analysis
 
-- Yomna: Find remaining initiation intervals and execution times
-    - Meigan: check and jump in if necessary
-- Yomna: critical instance analysis maths
 
 ```math
 \lceil \dfrac{}{25.2} \rceil * 0.53425
@@ -48,10 +45,7 @@ Group Peaky Blinders’ report for the ES_synth project.
 \le
 ```
 
-- Meigan: Make diagram for timing analysis
-
 ## List of resources and allocation
 
-- include tones header in here
 
 ## Dependency diagram
