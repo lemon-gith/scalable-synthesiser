@@ -2,23 +2,23 @@
 
 Group Peaky Blinders’ report for the ES_synth project.
 ## Table of Contents
-- [updateKeys Task](https://github.com/MITeo21/ES-synth/blob/master/markdowns/updateKeys.md)
-- [updateDisplay Task](https://github.com/MITeo21/ES-synth/blob/master/markdowns/updateDisplay.md)
-- [decodeMessage Task](https://github.com/MITeo21/ES-synth/tree/master/markdowns/decodeMessage.md)
-- [CAN_TX_TASK](https://github.com/MITeo21/ES-synth/blob/master/markdowns/CAN_TX_TASK.md)
-- [CAN_TX_ISR](https://github.com/MITeo21/ES-synth/blob/master/markdowns/CAN_TX_ISR.md)
-- [CAN_RX_ISR](https://github.com/MITeo21/ES-synth/tree/master/markdowns/CAN_RX_ISR.md)
-- [sampleISR](https://github.com/MITeo21/ES-synth/blob/master/markdowns/sampleISR.md)
+- [updateKeys Task](./report/updateKeys.md)
+- [updateDisplay Task](./report/updateDisplay.md)
+- [decodeMessage Task](./report/decodeMessage.md)
+- [CAN_TX_TASK](./report/CAN_TX_TASK.md)
+- [CAN_TX_ISR](./report/CAN_TX_ISR.md)
+- [CAN_RX_ISR](./report/CAN_RX_ISR.md)
+- [sampleISR](./report/sampleISR.md)
 
 
 ## Advanced features implemented
 
-- [Octaves](https://github.com/MITeo21/ES-synth/blob/master/markdowns/octaves.md)
-- [UI](https://github.com/MITeo21/ES-synth/blob/master/markdowns/UI.md)
-- [Polyphony](https://github.com/MITeo21/ES-synth/blob/master/markdowns/polyphony.md)
-- [Tones](https://github.com/MITeo21/ES-synth/blob/master/markdowns/tones.md)
-- [Metronome](https://github.com/MITeo21/ES-synth/blob/master/markdowns/Metronome.md)
-- [Video](https://www.youtube.com/watch?v=aVbcZlZeOfQ&feature=youtu.be)
+- [Octaves](./report/octaves.md)
+- [UI](./report/UI.md)
+- [Polyphony](./report/polyphony.md)
+- [Tones](./report/tones.md)
+- [Metronome](./report/Metronome.md)
+- [Video](https://www.youtube.com/watch?v=aVbcZlZeOfQ)
 
 ## Task categorisations and characterisations
 
