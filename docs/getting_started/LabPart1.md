@@ -16,7 +16,7 @@ There is a serial port for communication with a host via USB, and a CAN bus that
 
 The keyboard is controlled using a ST NUCLEO-L432KC microcontroller module that contains a STM32L432KCU6U processor, which has an Arm Cortex-M4 core.
 
-![Features of the synth module](synth.png)
+![Features of the synth module](images/synth.png)
 
 ### 1. Load the starter code onto the keyboard
 
@@ -25,7 +25,7 @@ Platformio can target many different embedded platforms using different framewor
 We will use the STM32duino framework, which provides an Arduino-like environment that makes it easy to access microcontroller hardware features.
 The overall development stack looks like this:
 
-![Synthesiser development stack](synth-stack.png)
+![Synthesiser development stack](images/synth-stack.png)
 
 Get started by installing Platformio and forking the starter code
 1. Install Visual Studio Code, if you don’t have it already, and add Platformio from the website, or by searching for it in the VS Code extensions marketplace
@@ -38,7 +38,7 @@ Get started by installing Platformio and forking the starter code
 8. Open the serial monitor using the 🔌 button on the toolbar.
    Press the reset button on the synth (SW19) or the MCU module (B1) and you will see the `Hello World’ message on the terminal
    
-![Hello World](hello-world.jpg)
+![Hello World](images/hello-world.jpg)
 
 > [!TIP]
 > 
@@ -59,7 +59,7 @@ Get started by installing Platformio and forking the starter code
 
 The keys and knobs on the keyboard module are connected to a key matrix, which allows many keys to be read with a small number of microcontroller pins.
 
-![Synthesiser key matrix](key-matrix.png)
+![Synthesiser key matrix](images/key-matrix.png)
 
 | [RA2,RA1,RA0] | C0 | C1 | C2 | C3 |
 | ------------- | -- | -- | -- | -- |
@@ -171,7 +171,7 @@ We will begin by generating a sawtooth wave with a frequency according to the ke
 Most digital systems for generating and processing signals use a constant sample rate: we will use a sample rate $f_\mathrm{s}$ of 22kHz.
 A fixed sample rate means that we can change the frequency of the note by changing the number of samples that make up one period of the waveform.
 
-![Illustration of generating sawtooth waves with a constant sample rate](sample-wave.png)
+![Illustration of generating sawtooth waves with a constant sample rate](images/sample-wave.png)
 
 Therefore, we need to convert each note frequency into a step size for a phase accumulator.
 Over time, the phase accumulator will count up until it overflows and starts again.
@@ -196,7 +196,7 @@ $$S=\frac{2^{32}f}{f_\mathrm{s}}$$
 	Therefore, a span of 12 keys results in a doubling of frequency, which is one octave.
 	Base your tuning on a frequency of 440Hz for the note A, which is the 10th key from the left of your keyboard and element 9 of your notes array.
 
-	![keyboard](keyboard.png)
+	![keyboard](images/keyboard.png)
 
 2.	Add code to your main loop that will check the state of each key in `inputs` and look up the corresponding step size in the `stepSizes` array if the key is pressed.
 	Store the result in a global variable:
@@ -213,7 +213,7 @@ $$S=\frac{2^{32}f}{f_\mathrm{s}}$$
 	 
 	Add information to the OLED display to show which note is selected.
 
-	![Keyboard with key press detection](key-detect.jpg)
+	![Keyboard with key press detection](images/key-detect.jpg)
 
 3.	Write a new function that will update the phase accumulator and set the analogue output voltage at each sample interval:
 
