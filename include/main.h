@@ -63,13 +63,13 @@ struct {
   SemaphoreHandle_t mutex;
 
   ButtonPress::State next_state(char button, const bool &isPressed){
-    static ButtonPress joystickPush{'j'};  // 0th button
+    static ButtonPress joystickPush{'j'};    // 0th button
+    static ButtonPress volumeKnobPush{'v'};  // 1st button
     switch (button){
       case 'j':
         return joystickPush.nextState(isPressed);
       case 'v':
-        // implement volume button press
-        return ButtonPress::OFF;
+        return volumeKnobPush.nextState(isPressed);
       default:
         // hopefully shouldn't get this
         return ButtonPress::OFF;
